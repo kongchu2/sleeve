@@ -71,7 +71,7 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
   // "F" toggles fullscreen; Esc is handled by the browser.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.repeat || e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       fs.toggle();
     };

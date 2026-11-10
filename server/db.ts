@@ -38,6 +38,8 @@ for (const column of ['track_number', 'disc_number', 'album_total_tracks']) {
   if (!playColumns.has(column)) db.exec(`ALTER TABLE plays ADD COLUMN ${column} INTEGER`);
 }
 
+db.exec('CREATE INDEX IF NOT EXISTS plays_track ON plays (track_id, played_at)');
+
 export function kvGet<T>(key: string): T | null {
   const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined;
   return row ? (JSON.parse(row.value) as T) : null;

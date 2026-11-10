@@ -14,7 +14,7 @@ const SCOPES = [
 
 type Tokens = { access_token: string; refresh_token: string; expires_at: number };
 type SpotifyImage = { url: string; width: number | null };
-type SpotifyTrack = {
+export type SpotifyTrack = {
   id: string | null;
   type?: string;
   name: string;
@@ -108,7 +108,7 @@ function pickImages(images: SpotifyImage[]) {
   };
 }
 
-function toTrackInfo(t: SpotifyTrack): TrackInfo | null {
+export function toTrackInfo(t: SpotifyTrack): TrackInfo | null {
   if (!t.id) return null; // local files have no id
   return {
     id: t.id,
@@ -155,6 +155,49 @@ export async function syncRecent(): Promise<number> {
   return added;
 }
 
+/** Like `api`, but waits out rate limiting (429 + Retry-After) instead of failing. */
+async function apiPatient(path: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await api(path);
+    if (res.status !== 429 || attempt >= 8) return res;
+    const wait = Math.min(Number(res.headers.get('retry-after')) || 2, 120);
+    await new Promise((r) => setTimeout(r, (wait + 1) * 1000));
+  }
+}
+
+// The batch endpoint is not available to every app; remembered after the first refusal.
+let batchTracksSupported = true;
+
+/**
+ * Look up tracks by id. Unknown or removed tracks map to null.
+ * `onProgress` is called with the number of ids resolved so far.
+ */
+export async function fetchTracks(ids: string[], onProgress?: (done: number) => void): Promise<Map<string, SpotifyTrack | null>> {
+  const out = new Map<string, SpotifyTrack | null>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    if (batchTracksSupported) {
+      const batch = await apiPatient('/tracks?ids=' + chunk.join(','));
+      if (batch.ok) {
+        const { tracks } = (await batch.json()) as { tracks: (SpotifyTrack | null)[] };
+        chunk.forEach((id, k) => out.set(id, tracks[k] ?? null));
+        onProgress?.(out.size);
+        continue;
+      }
+      if (batch.status === 401 || batch.status >= 500) throw new Error(`track lookup failed: ${batch.status}`);
+      batchTracksSupported = false;
+    }
+    for (const id of chunk) {
+      const one = await apiPatient('/tracks/' + id);
+      if (one.ok) out.set(id, (await one.json()) as SpotifyTrack);
+      else if (one.status === 404 || one.status === 400) out.set(id, null);
+      else throw new Error(`track lookup failed: ${one.status}`);
+      onProgress?.(out.size);
+    }
+  }
+  return out;
+}
+
 /**
  * Fill in track number / album size for plays stored before those columns existed.
  * Tracks Spotify no longer knows are marked with 0 so they are not retried forever.
@@ -165,29 +208,10 @@ export async function backfillTrackMeta(): Promise<number> {
   );
   if (!ids.length) return 0;
   const update = db.prepare('UPDATE plays SET track_number = ?, disc_number = ?, album_total_tracks = ? WHERE track_id = ?');
-  const store = (id: string, t: SpotifyTrack | null) =>
+  for (const [id, t] of await fetchTracks(ids)) {
     update.run(t?.track_number ?? 0, t?.disc_number ?? 0, t?.album.total_tracks ?? 0, id);
-
-  let filled = 0;
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50);
-    const batch = await api('/tracks?ids=' + chunk.join(','));
-    if (batch.ok) {
-      const { tracks } = (await batch.json()) as { tracks: (SpotifyTrack | null)[] };
-      chunk.forEach((id, k) => store(id, tracks[k] ?? null));
-      filled += chunk.length;
-      continue;
-    }
-    // The batch endpoint is not available to every app: fall back to one request per track.
-    for (const id of chunk) {
-      const one = await api('/tracks/' + id);
-      if (one.ok) store(id, (await one.json()) as SpotifyTrack);
-      else if (one.status === 404) store(id, null);
-      else throw new Error(`track lookup failed: ${one.status}`);
-      filled += 1;
-    }
   }
-  return filled;
+  return ids.length;
 }
 
 export async function nowPlaying(): Promise<{ isPlaying: boolean; progressMs: number; track: TrackInfo } | null> {

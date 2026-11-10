@@ -1,19 +1,35 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getNow, getStatus, type Now, type Status } from './api.ts';
 import { Calendar } from './Calendar.tsx';
+import { FullAlbums } from './FullAlbums.tsx';
+import { ImportHistory } from './ImportHistory.tsx';
 import { NowPlaying } from './NowPlaying.tsx';
+import { YearView } from './YearView.tsx';
 
-const viewFromHash = () => (location.hash === '#/now' ? 'now' : 'calendar');
+type Route = { view: 'calendar' | 'now' | 'year' | 'albums' | 'import'; date?: { y: number; m: number; d: number } };
+
+/** `#/now`, `#/year`, `#/albums`, `#/import`, or `#/day/2026-11-10` to open the calendar on a day. */
+function routeFromHash(): Route {
+  const hash = location.hash;
+  if (hash === '#/now') return { view: 'now' };
+  if (hash === '#/year') return { view: 'year' };
+  if (hash === '#/albums') return { view: 'albums' };
+  if (hash === '#/import') return { view: 'import' };
+  const day = hash.match(/^#\/day\/(\d{4})-(\d{2})-(\d{2})$/);
+  if (day) return { view: 'calendar', date: { y: Number(day[1]), m: Number(day[2]) - 1, d: Number(day[3]) } };
+  return { view: 'calendar' };
+}
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [failed, setFailed] = useState(false);
-  const [view, setView] = useState(viewFromHash);
+  const [route, setRoute] = useState(routeFromHash);
+  const view = route.view;
   const [now, setNow] = useState<Now | null>(null);
 
   useEffect(() => {
     getStatus().then(setStatus, () => setFailed(true));
-    const onHash = () => setView(viewFromHash());
+    const onHash = () => setRoute(routeFromHash());
     addEventListener('hashchange', onHash);
     return () => removeEventListener('hashchange', onHash);
   }, []);
@@ -50,7 +66,12 @@ export function App() {
       </Gate>
     );
 
-  return view === 'now' ? <NowPlaying now={now} refresh={refreshNow} /> : <Calendar now={now} />;
+  if (view === 'now') return <NowPlaying now={now} refresh={refreshNow} />;
+  if (view === 'year') return <YearView />;
+  if (view === 'albums') return <FullAlbums />;
+  if (view === 'import') return <ImportHistory />;
+  // Keyed by the requested day so following a link from another view re-opens the calendar there.
+  return <Calendar now={now} initial={route.date} key={route.date ? `${route.date.y}-${route.date.m}-${route.date.d}` : 'today'} />;
 }
 
 function Gate({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {

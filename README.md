@@ -3,10 +3,14 @@
 Your Spotify listening history as a calendar of album covers, plus a Now Playing screen that takes on the colour of the album and scrolls synced lyrics.
 
 - **Calendar** — every day is a tile made of the albums you played. Pick a day to see its albums, tracks and when you listened. Albums you played start to finish get a disc badge.
+- **Year** — twelve small months on one page, each day showing its most played album.
+- **Full albums** — a shelf of every album you played start to finish.
 - **Now Playing** — the cover's dominant colour drives the whole screen; lyrics follow the song. Press `F` for fullscreen.
 - **Yours** — it runs on your machine with your own Spotify app. Nothing is sent anywhere except Spotify and [LRCLIB](https://lrclib.net) (track and artist names, to find lyrics).
 
 Spotify only exposes your last 50 plays, so history builds up **from the moment you start running this**, and only while it is running.
+
+To fill in the past, request your **Extended streaming history** at <https://www.spotify.com/account/privacy/> and load the `Streaming_History_Audio_*.json` files on the app's **Import history** page. Each track is looked up on Spotify for its artwork, so a large history takes a while (it runs in the background and never adds a play twice).
 
 ## What you need
 

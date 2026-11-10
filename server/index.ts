@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { collect } from './collector.ts';
 import { db } from './db.ts';
+import { enqueueImport, importStatus } from './importer.ts';
 import { getLyrics } from './lyrics.ts';
 import * as spotify from './spotify.ts';
 
@@ -52,6 +53,63 @@ app.get('/api/plays', (c) => {
   if (!Number.isFinite(from) || !Number.isFinite(to)) return c.json({ error: 'from/to required' }, 400);
   const rows = db.prepare('SELECT * FROM plays WHERE played_at >= ? AND played_at < ? ORDER BY played_at').all(from, to);
   return c.json(rows);
+});
+
+/** Per-day summary for a range: the most played album of each day. `tz` is the viewer's UTC offset in minutes. */
+app.get('/api/days', (c) => {
+  const from = Number(c.req.query('from'));
+  const to = Number(c.req.query('to'));
+  const offset = (Number(c.req.query('tz')) || 0) * 60;
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return c.json({ error: 'from/to required' }, 400);
+  const rows = db
+    .prepare(
+      `SELECT strftime('%Y-%m-%d', played_at / 1000 + ?, 'unixepoch') AS day, album_id, album_name,
+              max(image_m) AS image_m, max(image_s) AS image_s, count(*) AS n
+       FROM plays WHERE played_at >= ? AND played_at < ?
+       GROUP BY day, album_id ORDER BY day, n DESC`,
+    )
+    .all(offset, from, to) as { day: string; album_id: string; album_name: string; image_m: string | null; image_s: string | null; n: number }[];
+  const days: { day: string; album: string; image_m: string | null; image_s: string | null; plays: number; albums: number }[] = [];
+  for (const r of rows) {
+    const last = days[days.length - 1];
+    if (last?.day === r.day) {
+      last.plays += r.n;
+      last.albums += 1;
+    } else days.push({ day: r.day, album: r.album_name, image_m: r.image_m, image_s: r.image_s, plays: r.n, albums: 1 });
+  }
+  return c.json(days);
+});
+
+/**
+ * Every album heard in full: all of its tracks in one unbroken run, in any order.
+ * Mirrors the rule used on the calendar (src/Calendar.tsx).
+ */
+app.get('/api/full-albums', (c) => {
+  const rows = db
+    .prepare('SELECT played_at, track_id, album_id, album_name, artists, image_m, album_total_tracks FROM plays ORDER BY played_at')
+    .all() as { played_at: number; track_id: string; album_id: string; album_name: string; artists: string; image_m: string | null; album_total_tracks: number | null }[];
+  const albums = new Map<string, { id: string; name: string; artists: string; image: string | null; tracks: number; times: number[] }>();
+  let start = 0;
+  for (let i = 1; i <= rows.length; i++) {
+    if (i < rows.length && rows[i].album_id === rows[start].album_id) continue;
+    const first = rows[start];
+    const total = first.album_total_tracks ?? 0;
+    if (total >= 4 && new Set(rows.slice(start, i).map((r) => r.track_id)).size >= total) {
+      const entry = albums.get(first.album_id) ?? { id: first.album_id, name: first.album_name, artists: first.artists, image: first.image_m, tracks: total, times: [] };
+      entry.times.push(first.played_at);
+      albums.set(first.album_id, entry);
+    }
+    start = i;
+  }
+  return c.json([...albums.values()].sort((a, b) => b.times[b.times.length - 1] - a.times[a.times.length - 1]));
+});
+
+app.get('/api/import', (c) => c.json(importStatus()));
+
+app.post('/api/import', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { entries?: unknown[] } | null;
+  if (!body || !Array.isArray(body.entries)) return c.json({ error: 'entries required' }, 400);
+  return c.json({ accepted: enqueueImport(body.entries) });
 });
 
 app.get('/api/now', async (c) => c.json(await spotify.nowPlaying()));

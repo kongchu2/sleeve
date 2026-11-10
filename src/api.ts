@@ -41,6 +41,36 @@ async function get<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+export type DaySummary = { day: string; album: string; image_m: string | null; image_s: string | null; plays: number; albums: number };
+
+export type FullAlbum = { id: string; name: string; artists: string; image: string | null; tracks: number; times: number[] };
+
+export type ImportEntry = { ts: number; id: string; ms: number; name: string; artist: string; album: string };
+
+export type ImportStatus = {
+  state: 'idle' | 'running' | 'done' | 'error';
+  received: number;
+  processed: number;
+  tracksTotal: number;
+  tracksDone: number;
+  added: number;
+  skipped: number;
+  error: string | null;
+};
+
+/** Day summaries for a range, grouped by the viewer's local date. */
+export const getDays = (from: number, to: number) =>
+  get<DaySummary[]>(`/api/days?from=${from}&to=${to}&tz=${-new Date(from).getTimezoneOffset()}`);
+
+export const getFullAlbums = () => get<FullAlbum[]>('/api/full-albums');
+
+export const getImportStatus = () => get<ImportStatus>('/api/import');
+
+export async function postImport(entries: ImportEntry[]): Promise<void> {
+  const res = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }) });
+  if (!res.ok) throw new Error(`import upload failed: ${res.status}`);
+}
+
 export const getStatus = () => get<Status>('/api/status');
 
 export const getPlays = (from: number, to: number) => get<Play[]>(`/api/plays?from=${from}&to=${to}`);

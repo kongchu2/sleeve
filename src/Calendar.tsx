@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { getPlays, type Now, type Play } from './api.ts';
 import { usePalette, usePoints } from './color.ts';
+import { MONTHS } from './shared.tsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const MOSAIC: Record<number, [string, string][]> = {
   1: [['1 / 3', '1 / 3']],
@@ -110,10 +110,10 @@ function FullAlbumTag({ imageS }: { imageS: string | null }) {
 
 const two = (n: number) => String(n).padStart(2, '0');
 
-export function Calendar({ now }: { now: Now | null }) {
+export function Calendar({ now, initial }: { now: Now | null; initial?: { y: number; m: number; d: number } }) {
   const today = new Date();
-  const [ym, setYm] = useState({ y: today.getFullYear(), m: today.getMonth() });
-  const [picked, setPicked] = useState<number | null>(null);
+  const [ym, setYm] = useState(initial ? { y: initial.y, m: initial.m } : { y: today.getFullYear(), m: today.getMonth() });
+  const [picked, setPicked] = useState<number | null>(initial?.d ?? null);
   const [plays, setPlays] = useState<Play[]>([]);
   // Hovered cover, painted across the whole page. `prev` stays underneath so covers cross-fade.
   const [bg, setBg] = useState<{ cur: string | null; prev: string | null; on: boolean }>({ cur: null, prev: null, on: false });
@@ -208,6 +208,11 @@ export function Calendar({ now }: { now: Now | null }) {
             <div className="cal-summary">
               {plays.length ? `${plural(plays.length, 'play')} across ${plural(byDay.size, 'day')}` : 'Nothing logged this month yet'}
             </div>
+            <nav className="cal-links" aria-label="More views">
+              <a href="#/year">Year</a>
+              <a href="#/albums">Full albums</a>
+              <a href="#/import">Import history</a>
+            </nav>
           </div>
           {now && <NowPill now={now} />}
         </header>
