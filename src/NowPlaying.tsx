@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { control, getLyrics, type Lyrics, type Now } from './api.ts';
 import { usePalette } from './color.ts';
 
+const FLOAT_KEY = 'cover-float';
+
 const fmt = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -65,6 +67,16 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
   const pos = usePosition(now);
   const [lyrics, setLyrics] = useState<Lyrics | 'loading' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The cover floats by default; clicking it turns that off (remembered in this browser).
+  const [floating, setFloating] = useState(() => {
+    try { return localStorage.getItem(FLOAT_KEY) !== 'off'; } catch { return true; }
+  });
+  const toggleFloating = () => {
+    setFloating((on) => {
+      try { localStorage.setItem(FLOAT_KEY, on ? 'off' : 'on'); } catch { /* storage unavailable */ }
+      return !on;
+    });
+  };
   const rootRef = useRef<HTMLDivElement>(null);
   const fs = useFullscreen(rootRef);
 
@@ -129,11 +141,19 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
         ) : (
           <main className="np-main">
               <section className="np-left" aria-label="Current track">
-                {track.imageL ? (
-                  <img className={'cover' + (now.isPlaying ? '' : ' is-paused')} src={track.imageL} alt={`${track.album} album cover`} key={track.imageL} />
-                ) : (
-                  <div className="cover cover-blank" role="img" aria-label="No album cover" />
-                )}
+                <button
+                  className={'cover-btn' + (floating ? ' is-floating' : '') + (now.isPlaying ? '' : ' is-paused')}
+                  aria-pressed={floating}
+                  aria-label="Floating cover motion"
+                  title={floating ? 'Click to keep the cover still' : 'Click to let the cover float'}
+                  onClick={toggleFloating}
+                >
+                  {track.imageL ? (
+                    <img className="cover" src={track.imageL} alt={`${track.album} album cover`} key={track.imageL} />
+                  ) : (
+                    <div className="cover cover-blank" role="img" aria-label="No album cover" />
+                  )}
+                </button>
                 <div className="np-titles">
                   <h1>{track.name}</h1>
                   <div className="np-artist">{track.artists}</div>
