@@ -1,4 +1,4 @@
-# Listening Log
+# spotify-calendar
 
 Your Spotify listening history as a calendar of album covers, plus a Now Playing screen that takes on the colour of the album and scrolls synced lyrics.
 
