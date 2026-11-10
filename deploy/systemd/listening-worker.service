@@ -1,0 +1,17 @@
+# Example unit: adjust User, the paths and the node binary to your machine.
+[Unit]
+Description=Listening Log collector worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=listening
+WorkingDirectory=/opt/spotify-calendar
+EnvironmentFile=/opt/spotify-calendar/.env
+ExecStart=/usr/bin/node server/worker.ts
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

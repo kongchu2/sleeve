@@ -1,0 +1,14 @@
+services:
+  listening-log:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Published on loopback only: Spotify accepts http://127.0.0.1 redirect URIs,
+      # and the API (which can control playback) stays off your network.
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - listening-data:/app/data
+
+volumes:
+  listening-data:

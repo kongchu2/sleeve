@@ -1,40 +1,89 @@
 # Listening Log
 
-A personal web app that stacks your Spotify listening history into a day-by-day calendar of album covers, and shows the current track with the album's point colour and synced lyrics.
+Your Spotify listening history as a calendar of album covers, plus a Now Playing screen that takes on the colour of the album and scrolls synced lyrics.
 
-## Setup
+- **Calendar** — every day is a tile made of the albums you played. Pick a day to see its albums, tracks and when you listened. Albums you played start to finish get a disc badge.
+- **Now Playing** — the cover's dominant colour drives the whole screen; lyrics follow the song. Press `F` for fullscreen.
+- **Yours** — it runs on your machine with your own Spotify app. Nothing is sent anywhere except Spotify and [LRCLIB](https://lrclib.net) (track and artist names, to find lyrics).
 
-1. Create an app at <https://developer.spotify.com/dashboard> (Web API) and register `http://127.0.0.1:8787/auth/callback` as the Redirect URI.
-2. Copy `.env.example` to `.env` and fill in the Client ID and Secret.
-3. `npm install`
+Spotify only exposes your last 50 plays, so history builds up **from the moment you start running this**, and only while it is running.
 
-## Run
+## What you need
 
-- Development: `npm run dev` → <http://127.0.0.1:5180>
-- Always-on: `npm run build && npm start` → <http://127.0.0.1:8787>
+- A Spotify account. Spotify currently requires the owner of a developer app to have **Premium**; playback controls in the app need Premium too.
+- Docker, or Node.js 24+.
 
-## How it works
+## 1. Create a Spotify app
 
-- The server (`server/`) pulls Spotify's 50 most recent plays every 2 minutes into `data/listening.db` (SQLite). Spotify does not expose full history, so **only plays made while the server is running are kept**.
-- The point colour is extracted in the browser from the album cover's pixels (`src/color.ts`).
-- Lyrics come from [LRCLIB](https://lrclib.net), looked up by track and artist name and cached in the database.
-- Playback control (play/pause, previous/next, click a lyric line to seek) requires Spotify Premium.
-- Press `F` on the Now Playing screen for fullscreen.
+1. Open <https://developer.spotify.com/dashboard> and create an app.
+2. Tick **Web API**.
+3. Add the Redirect URI `http://127.0.0.1:8787/auth/callback` (it must be `127.0.0.1`, not `localhost`).
+4. Copy the **Client ID** and **Client secret** from the app's settings.
 
-## Deploy
-
-Production runs as two processes sharing one SQLite database:
-
-- `server/worker.ts` — collects plays every 2 minutes and publishes them to a separate **listening archive** git repository (`plays/YYYY-MM.jsonl`, one JSON object per play), pushing at most every 15 minutes. On start it also restores anything the archive has that the database lacks.
-- `server/index.ts` with `COLLECT=0` — serves the built web app and the API.
-
-Sketch (systemd units are in `deploy/`):
+## 2. Configure
 
 ```sh
-npm ci && npm run build
-git clone <archive-repo> ../listening-archive     # the worker needs push access
-# .env: Spotify credentials, DATA_REPO_DIR=../listening-archive
-sudo cp deploy/*.service /etc/systemd/system/ && sudo systemctl enable --now listening-worker listening-web
+git clone https://github.com/kongchu2/spotify-calendar.git
+cd spotify-calendar
+cp .env.example .env      # then put your Client ID and secret in .env
 ```
 
-The web server listens on `127.0.0.1:8787`; put it behind something that provides HTTPS and access control (it exposes playback control). Sign in to Spotify once locally and copy `data/listening.db` over, or register the deployed `/auth/callback` URL in the Spotify dashboard and set `SPOTIFY_REDIRECT_URI`.
+## 3. Run
+
+### With Docker
+
+```sh
+docker compose up -d --build
+```
+
+Open <http://127.0.0.1:8787> and click **Connect Spotify**. Your history lives in the `listening-data` Docker volume and survives restarts and rebuilds.
+
+### With Node
+
+```sh
+npm ci
+npm run build
+npm start
+```
+
+Open <http://127.0.0.1:8787>. The database is `data/listening.db`.
+
+Leave it running: plays are collected every 2 minutes.
+
+## Development
+
+```sh
+npm install
+npm run dev               # http://127.0.0.1:5180, API on :8787
+```
+
+- `server/` — Hono API, Spotify client, collector, SQLite (`node:sqlite`).
+- `src/` — React app. `src/color.ts` extracts the point colour from the cover in the browser.
+
+## Running on a server
+
+The server listens on `127.0.0.1` only. To reach it from other devices, put it behind something that provides **HTTPS and access control** (a private network such as Tailscale, or a reverse proxy with authentication) — anyone who can reach the API can control your playback.
+
+- Spotify requires HTTPS for non-loopback redirect URIs. Either register `https://your-host/auth/callback` in the Spotify dashboard and set `SPOTIFY_REDIRECT_URI`, or sign in once on your own machine and copy `data/listening.db` to the server.
+- Example systemd units are in `deploy/systemd/`.
+
+### Optional: archive your history to a git repository
+
+`server/worker.ts` is a standalone collector that also publishes every play to a separate git repository as JSON Lines (`plays/YYYY-MM.jsonl`), pushing at most every 15 minutes, and restores the database from it on start. To use it, run the web server with `COLLECT=0`, run `npm run worker` alongside it, and set `DATA_REPO_DIR` to a clone of your archive repository that can push.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | — | Your Spotify app's credentials (required) |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:$PORT/auth/callback` | Must match a Redirect URI registered in the dashboard |
+| `PORT` | `8787` | Port the server listens on |
+| `HOST` | `127.0.0.1` | Address the server binds to |
+| `DB_PATH` | `data/listening.db` | SQLite database file |
+| `COLLECT` | on | Set to `0` to stop the web server from collecting (when the worker does it) |
+| `DATA_REPO_DIR` | — | Archive repository clone used by the worker |
+| `ARCHIVE_PUSH_MINUTES` | `15` | Minimum minutes between archive pushes |
+
+## License
+
+[MIT](LICENSE)

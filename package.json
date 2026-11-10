@@ -22,5 +22,9 @@
     "concurrently": "^10.0.7",
     "typescript": "^7.0.2",
     "vite": "^8.3.7"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
   }
 }

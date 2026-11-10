@@ -8,6 +8,8 @@ import { getLyrics } from './lyrics.ts';
 import * as spotify from './spotify.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
+// Loopback by default: the API can control playback, so only widen this behind something that restricts access.
+const HOST = process.env.HOST ?? '127.0.0.1';
 const APP_URL = process.env.APP_URL ?? '/';
 const SYNC_INTERVAL = 2 * 60 * 1000;
 
@@ -70,8 +72,8 @@ if (existsSync('dist/index.html')) {
   app.get('*', serveStatic({ path: './dist/index.html' }));
 }
 
-serve({ fetch: app.fetch, port: PORT, hostname: '127.0.0.1' }, () => {
-  console.log(`listening-calendar server on http://127.0.0.1:${PORT}`);
+serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
+  console.log(`listening-calendar server on http://${HOST}:${PORT}`);
   if (!spotify.isConfigured()) console.log('Spotify credentials missing: copy .env.example to .env and fill it in.');
   // COLLECT=0 leaves collection to the separate worker (server/worker.ts).
   if (process.env.COLLECT !== '0') {
