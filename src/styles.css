@@ -172,7 +172,7 @@ a { color: inherit; }
 .line.is-past { opacity: 0.2; }
 .line.is-active { opacity: 1; transform: none; text-shadow: 0 0 40px color-mix(in srgb, var(--point) 60%, transparent); }
 .line:hover { opacity: 1; filter: none !important; }
-.lyrics-plain { max-height: 70vh; overflow-y: auto; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; line-height: 1.9; white-space: pre-line; }
+.lyrics-plain { max-height: 70vh; overflow-y: auto; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.9; white-space: pre-line; opacity: 0.55; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
 
 
 /* ───── Motion ───── */
