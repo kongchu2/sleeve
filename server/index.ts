@@ -7,7 +7,7 @@ import { db } from './db.ts';
 import { enqueueImport, importStatus } from './importer.ts';
 import { getLyrics } from './lyrics.ts';
 import * as spotify from './spotify.ts';
-import { dayNotes, fullAlbums, recap } from './stats.ts';
+import { dayNotes, fullAlbums, recap, wallCovers } from './stats.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // Loopback by default: the API can control playback, so only widen this behind something that restricts access.
@@ -87,6 +87,11 @@ app.get('/api/day-notes', (c) => {
   const day = c.req.query('day') ?? '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return c.json({ error: 'day required (YYYY-MM-DD)' }, 400);
   return c.json(dayNotes(day, Number(c.req.query('tz')) || 0));
+});
+
+app.get('/api/wall', (c) => {
+  const limit = Math.min(600, Math.max(1, Number(c.req.query('limit')) || 200));
+  return c.json(wallCovers(limit));
 });
 
 app.get('/api/recap', (c) => {

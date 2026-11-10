@@ -86,6 +86,9 @@ export const getDayNotes = (day: string) => get<DayNotes>(`/api/day-notes?day=${
 
 export const getRecap = (from: number, to: number) => get<Recap>(`/api/recap?from=${from}&to=${to}&tz=${tzOffset(from)}`);
 
+/** Distinct covers for the standby wall, most played first (see server/stats.ts `wallCovers`). */
+export const getWall = (limit: number) => get<{ months: number; covers: string[] }>(`/api/wall?limit=${limit}`);
+
 export const getFullAlbums = () => get<FullAlbum[]>('/api/full-albums');
 
 export const getImportStatus = () => get<ImportStatus>('/api/import');

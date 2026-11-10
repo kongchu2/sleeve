@@ -128,3 +128,28 @@ export function recap(from: number, to: number, tz: number) {
     peakHour: rows.length ? hours.indexOf(Math.max(...hours)) : null,
   };
 }
+
+const MONTH_MS = 30 * 86_400_000;
+const MAX_WALL_MONTHS = 36;
+
+/**
+ * Distinct album covers for the standby wall, most played first.
+ * Starts with the last month and widens one month at a time (up to 36)
+ * until there are `limit` different covers or the history runs out.
+ */
+export function wallCovers(limit: number, now = Date.now()) {
+  const oldest = (db.prepare('SELECT min(played_at) AS t FROM plays').get() as { t: number | null }).t;
+  const query = db.prepare(
+    `SELECT image_m AS image, count(*) AS n FROM plays
+     WHERE played_at >= ? AND image_m IS NOT NULL
+     GROUP BY image_m ORDER BY n DESC, max(played_at) DESC LIMIT ?`,
+  );
+  let months = 1;
+  let covers: { image: string; n: number }[] = [];
+  for (; months <= MAX_WALL_MONTHS; months++) {
+    const since = now - months * MONTH_MS;
+    covers = query.all(since, limit) as { image: string; n: number }[];
+    if (covers.length >= limit || oldest === null || since <= oldest) break;
+  }
+  return { months: Math.min(months, MAX_WALL_MONTHS), covers: covers.map((c) => c.image) };
+}
