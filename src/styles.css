@@ -212,8 +212,10 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .np-header, .np-controls, .np-progress { transition: opacity 0.6s; }
 /* Fullscreen: the header floats over the corner (it fades out anyway), freeing its row for a bigger cover. */
 .np.is-fs { width: 100vw; height: 100vh; --pad: clamp(20px, 4vw, 72px); --cover: clamp(220px, min(calc(100vh - 2 * var(--pad) - 330px), 42vw), 640px); }
-/* Only the content may scroll (when a narrow screen stacks the lyrics below); the oversized background must not. */
-.np.is-fs .np-wrap { max-width: 1760px; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+/* The content column must not clip (a scroll container would cut the cover's glow off at its edges).
+   Only on narrow screens, where the lyrics stack below and the column spans the full width, may it scroll. */
+.np.is-fs .np-wrap { max-width: 1760px; min-height: 0; }
+@media (max-width: 900px) { .np.is-fs .np-wrap { overflow-y: auto; scrollbar-width: none; } }
 .np.is-fs .np-header { position: absolute; top: var(--pad); left: var(--pad); right: var(--pad); z-index: 2; }
 /* The back arrow would sit on top of the cover here; leave fullscreen first to navigate. */
 .np.is-fs .back { visibility: hidden; }
