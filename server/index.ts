@@ -7,6 +7,7 @@ import { db } from './db.ts';
 import { enqueueImport, importStatus } from './importer.ts';
 import { getLyrics } from './lyrics.ts';
 import * as spotify from './spotify.ts';
+import { dayNotes, fullAlbums, recap } from './stats.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // Loopback by default: the API can control playback, so only widen this behind something that restricts access.
@@ -80,28 +81,19 @@ app.get('/api/days', (c) => {
   return c.json(days);
 });
 
-/**
- * Every album heard in full: all of its tracks in one unbroken run, in any order.
- * Mirrors the rule used on the calendar (src/Calendar.tsx).
- */
-app.get('/api/full-albums', (c) => {
-  const rows = db
-    .prepare('SELECT played_at, track_id, album_id, album_name, artists, image_m, album_total_tracks FROM plays ORDER BY played_at')
-    .all() as { played_at: number; track_id: string; album_id: string; album_name: string; artists: string; image_m: string | null; album_total_tracks: number | null }[];
-  const albums = new Map<string, { id: string; name: string; artists: string; image: string | null; tracks: number; times: number[] }>();
-  let start = 0;
-  for (let i = 1; i <= rows.length; i++) {
-    if (i < rows.length && rows[i].album_id === rows[start].album_id) continue;
-    const first = rows[start];
-    const total = first.album_total_tracks ?? 0;
-    if (total >= 4 && new Set(rows.slice(start, i).map((r) => r.track_id)).size >= total) {
-      const entry = albums.get(first.album_id) ?? { id: first.album_id, name: first.album_name, artists: first.artists, image: first.image_m, tracks: total, times: [] };
-      entry.times.push(first.played_at);
-      albums.set(first.album_id, entry);
-    }
-    start = i;
-  }
-  return c.json([...albums.values()].sort((a, b) => b.times[b.times.length - 1] - a.times[a.times.length - 1]));
+app.get('/api/full-albums', (c) => c.json(fullAlbums()));
+
+app.get('/api/day-notes', (c) => {
+  const day = c.req.query('day') ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return c.json({ error: 'day required (YYYY-MM-DD)' }, 400);
+  return c.json(dayNotes(day, Number(c.req.query('tz')) || 0));
+});
+
+app.get('/api/recap', (c) => {
+  const from = Number(c.req.query('from'));
+  const to = Number(c.req.query('to'));
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return c.json({ error: 'from/to required' }, 400);
+  return c.json(recap(from, to, Number(c.req.query('tz')) || 0));
 });
 
 app.get('/api/import', (c) => c.json(importStatus()));

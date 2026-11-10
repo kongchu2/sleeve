@@ -62,6 +62,30 @@ export type ImportStatus = {
 export const getDays = (from: number, to: number) =>
   get<DaySummary[]>(`/api/days?from=${from}&to=${to}&tz=${-new Date(from).getTimezoneOffset()}`);
 
+export type DayNotes = {
+  streak: { album: string; days: number } | null;
+  onThisDay: { year: number; day: string; album: string; artists: string; image_s: string | null; plays: number }[];
+};
+
+export type Recap = {
+  plays: number;
+  minutes: number;
+  days: number;
+  albums: number;
+  fullAlbums: number;
+  topAlbums: { id: string; name: string; artists: string; image_m: string | null; image_s: string | null; plays: number }[];
+  topArtists: { name: string; plays: number }[];
+  hours: number[];
+  peakHour: number | null;
+};
+
+const tzOffset = (at: number) => -new Date(at).getTimezoneOffset();
+
+/** Streak and "on this day" facts for a local date (YYYY-MM-DD). */
+export const getDayNotes = (day: string) => get<DayNotes>(`/api/day-notes?day=${day}&tz=${tzOffset(Date.parse(day + 'T12:00:00'))}`);
+
+export const getRecap = (from: number, to: number) => get<Recap>(`/api/recap?from=${from}&to=${to}&tz=${tzOffset(from)}`);
+
 export const getFullAlbums = () => get<FullAlbum[]>('/api/full-albums');
 
 export const getImportStatus = () => get<ImportStatus>('/api/import');

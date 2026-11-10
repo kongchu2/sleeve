@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { getPlays, type Now, type Play } from './api.ts';
+import { getDayNotes, getPlays, type DayNotes, type Now, type Play } from './api.ts';
 import { usePalette, usePoints } from './color.ts';
 import { MONTHS } from './shared.tsx';
 
@@ -174,6 +174,24 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   }, [selPlays]);
   const points = usePoints(useMemo(() => [...new Set(hourImages.filter((u): u is string => !!u))], [hourImages]));
 
+  // The month's colour flow: one swatch per day, tinted by that day's most played album.
+  const dayCovers = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => albumsOf(byDay.get(i + 1) ?? [])[0]?.imageS ?? null),
+    [byDay, daysInMonth],
+  );
+  const dayColors = usePoints(useMemo(() => [...new Set(dayCovers.filter((u): u is string => !!u))], [dayCovers]));
+
+  // Streak and "on this day" for the selected date.
+  const selKey = `${ym.y}-${two(ym.m + 1)}-${two(sel)}`;
+  const [notes, setNotes] = useState<DayNotes | null>(null);
+  const selPlayCount = selPlays.length;
+  useEffect(() => {
+    let live = true;
+    setNotes(null);
+    getDayNotes(selKey).then((n) => { if (live) setNotes(n); }, () => {});
+    return () => { live = false; };
+  }, [selKey, selPlayCount]);
+
   const minutes = Math.round(selPlays.reduce((a, p) => a + p.duration_ms, 0) / 60_000);
   const selIsToday = isCurrentMonth && sel === today.getDate();
 
@@ -211,6 +229,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
             <nav className="cal-links" aria-label="More views">
               <a href="#/year">Year</a>
               <a href="#/albums">Full albums</a>
+              <a href={`#/recap/${ym.y}-${two(ym.m + 1)}`}>Recap</a>
               <a href="#/import">Import history</a>
             </nav>
           </div>
@@ -219,6 +238,11 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
 
         <main className="cal-main">
           <section className="cal-grid-col" aria-label="Calendar">
+            <div className="flow" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(0, 1fr))` }}>
+              {dayCovers.map((u, i) => (
+                <span key={i} className={i + 1 === sel ? 'is-selected' : undefined} style={u ? { background: dayColors[u] ?? '#3A3A44' } : undefined} />
+              ))}
+            </div>
             <div className="weekdays" aria-hidden="true">
               {WEEKDAYS.map((w) => <div key={w}>{w.slice(0, 3)}</div>)}
             </div>
@@ -270,6 +294,26 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                 </div>
               </div>
             </div>
+
+            {notes && (notes.streak || notes.onThisDay.length > 0) && (
+              <div className="notes">
+                {notes.streak && (
+                  <div className="note">
+                    <span className="note-label">{notes.streak.days} days in a row</span>
+                    <span className="note-text">{notes.streak.album}</span>
+                  </div>
+                )}
+                {notes.onThisDay.slice(0, 2).map((o) => (
+                  <a className="note" key={o.year} href={`#/day/${o.day}`}>
+                    <span className="note-label">{ym.y - o.year === 1 ? 'A year ago today' : `${ym.y - o.year} years ago today`}</span>
+                    <span className="note-text">
+                      {o.image_s && <img src={o.image_s} alt="" loading="lazy" />}
+                      {o.album}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            )}
 
             {selIsToday && now && (
               <a className="now-cta" href="#/now">

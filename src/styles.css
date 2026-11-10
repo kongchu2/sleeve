@@ -157,6 +157,43 @@ a { color: inherit; }
 .import-status { display: flex; flex-direction: column; gap: 12px; }
 .import-fill { background-color: var(--ink); }
 
+/* ───── Colour flow, day notes, recap ───── */
+.flow { display: grid; gap: 2px; margin-bottom: 6px; }
+.flow span { display: block; height: 6px; border-radius: 2px; background: #1c1c23; transition: background-color 0.5s, transform 0.3s var(--ease); }
+.flow span.is-selected { transform: scaleY(2); }
+
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.note { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-left: 12px; border-left: 2px solid var(--accent); text-decoration: none; transition: border-color 0.5s; }
+.note-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.note-text { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-text img { flex: none; width: 22px; height: 22px; border-radius: 4px; object-fit: cover; }
+a.note:hover .note-text { color: #fff; text-decoration: underline; }
+
+.recap-bg { position: absolute; top: -15%; left: -15%; width: 130%; height: 130%; object-fit: cover; filter: blur(110px) saturate(1.5) brightness(0.32); pointer-events: none; animation: fade-cover 1s both; }
+.recap-empty { margin: 0; font-size: 17px; color: var(--muted); }
+.recap-sheet { display: flex; flex-wrap: wrap; align-items: flex-start; gap: clamp(28px, 4vw, 64px); }
+.recap-top { flex: 1 1 320px; max-width: 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.recap-cover { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; background: #1c1c23; box-shadow: 0 50px 120px -30px color-mix(in srgb, var(--accent) 60%, transparent); }
+.recap-top-text { display: flex; flex-direction: column; gap: 6px; }
+.recap-album { font-family: var(--display); font-weight: 800; font-size: clamp(26px, 3vw, 40px); line-height: 1.1; letter-spacing: -0.03em; }
+.recap-artist { font-size: 15px; color: #d6d4dc; }
+.recap-side { flex: 999 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 36px; }
+.recap-stats { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 28px 20px; align-items: end; }
+.recap-stats div:has(.recap-small) { grid-column: span 2; }
+.recap-stats div { display: flex; flex-direction: column-reverse; gap: 4px; min-width: 0; }
+.recap-stats dt { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.recap-stats dd { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(30px, 3.2vw, 44px); line-height: 1; letter-spacing: -0.04em; white-space: nowrap; color: var(--accent); transition: color 0.6s; }
+.recap-stats dd.recap-small { font-size: clamp(20px, 2vw, 26px); line-height: 1.25; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recap-hours { display: flex; flex-direction: column; gap: 8px; }
+.recap-hours-head { display: flex; align-items: baseline; justify-content: space-between; }
+.recap-peak { font-family: var(--mono); font-size: 14px; }
+.recap-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; align-items: end; height: 96px; }
+.recap-bars span { display: block; border-radius: 2px 2px 0 0; background: rgba(255, 255, 255, 0.22); }
+.recap-bars span.is-peak { background: var(--accent); }
+.recap-list-title { margin-bottom: 4px; }
+.recap-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.recap-rank { flex: none; width: 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
 /* ───── Now Playing ───── */
 /* --cover is derived from the viewport height minus everything stacked around it (padding, header, titles,
    progress, controls), so the left column always fits on screen. */
@@ -223,6 +260,13 @@ a { color: inherit; }
 .lyrics-plain { max-height: 70vh; overflow-y: auto; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.9; white-space: pre-line; opacity: 0.55; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
 
 
+/* ───── Standby (fullscreen, nothing playing) ───── */
+.standby { position: absolute; inset: 0; z-index: 5; overflow: hidden; background: #060608; color: #f4f2ec; animation: fade-cover 1.6s both; }
+.standby-cover { position: absolute; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 8px; opacity: 0.5; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); animation: standby-drift 50s ease-in-out infinite alternate; }
+.standby-clock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2vh; text-shadow: 0 0 60px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.7); animation: standby-clock 90s ease-in-out infinite alternate; }
+.standby-time { font-family: var(--display); font-weight: 800; font-size: clamp(88px, 19vw, 360px); line-height: 0.9; letter-spacing: -0.05em; }
+.standby-date { font-family: var(--mono); font-size: clamp(13px, 1.3vw, 22px); letter-spacing: 0.16em; text-transform: uppercase; color: #c9c7d0; }
+
 /* ───── Motion ───── */
 @keyframes eq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.75); } 100% { box-shadow: 0 0 0 9px rgba(255, 255, 255, 0); } }
@@ -230,12 +274,15 @@ a { color: inherit; }
 @keyframes fade-ambient { from { opacity: 0; } to { opacity: 0.34; } }
 @keyframes fade-blob { from { opacity: 0; } to { opacity: 1; } }
 @keyframes breathe { 0%, 100% { transform: translateY(0) rotate(-1.2deg); } 50% { transform: translateY(-10px) rotate(0.6deg); } }
+@keyframes standby-drift { 0% { transform: translate(0, 0) rotate(0deg); } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--spin)); } }
+/* The clock wanders a little too, so a display left on all day does not burn in. */
+@keyframes standby-clock { 0% { transform: translate(-1.5vw, -2vh); } 100% { transform: translate(1.5vw, 2vh); } }
 @keyframes fade-cover { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drift-a { 0% { transform: translate(0, 0) rotate(0deg) scale(1); } 100% { transform: translate(4%, 3%) rotate(14deg) scale(1.15); } }
 @keyframes drift-b { 0% { transform: translate(0, 0) rotate(0deg) scale(1.1); } 100% { transform: translate(-160px, -80px) rotate(-90deg) scale(0.9); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .day-filled, .eq span, .live, .blob-a, .blob-b, .cover, .cover-btn.is-floating { animation: none; }
+  .day-filled, .eq span, .live, .blob-a, .blob-b, .cover, .cover-btn.is-floating, .standby-cover, .standby-clock { animation: none; }
   .ctl:hover { transform: none; }
   .lyrics-inner, .line { transition: none; }
 }

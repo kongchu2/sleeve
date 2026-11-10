@@ -4,9 +4,10 @@ import { Calendar } from './Calendar.tsx';
 import { FullAlbums } from './FullAlbums.tsx';
 import { ImportHistory } from './ImportHistory.tsx';
 import { NowPlaying } from './NowPlaying.tsx';
+import { RecapView } from './Recap.tsx';
 import { YearView } from './YearView.tsx';
 
-type Route = { view: 'calendar' | 'now' | 'year' | 'albums' | 'import'; date?: { y: number; m: number; d: number } };
+type Route = { view: 'calendar' | 'now' | 'year' | 'albums' | 'import' | 'recap'; date?: { y: number; m: number; d: number } };
 
 /** `#/now`, `#/year`, `#/albums`, `#/import`, or `#/day/2026-11-10` to open the calendar on a day. */
 function routeFromHash(): Route {
@@ -15,6 +16,8 @@ function routeFromHash(): Route {
   if (hash === '#/year') return { view: 'year' };
   if (hash === '#/albums') return { view: 'albums' };
   if (hash === '#/import') return { view: 'import' };
+  const month = hash.match(/^#\/recap\/(\d{4})-(\d{2})$/);
+  if (month) return { view: 'recap', date: { y: Number(month[1]), m: Number(month[2]) - 1, d: 1 } };
   const day = hash.match(/^#\/day\/(\d{4})-(\d{2})-(\d{2})$/);
   if (day) return { view: 'calendar', date: { y: Number(day[1]), m: Number(day[2]) - 1, d: Number(day[3]) } };
   return { view: 'calendar' };
@@ -70,6 +73,7 @@ export function App() {
   if (view === 'year') return <YearView />;
   if (view === 'albums') return <FullAlbums />;
   if (view === 'import') return <ImportHistory />;
+  if (view === 'recap' && route.date) return <RecapView year={route.date.y} month={route.date.m} key={`${route.date.y}-${route.date.m}`} />;
   // Keyed by the requested day so following a link from another view re-opens the calendar there.
   return <Calendar now={now} initial={route.date} key={route.date ? `${route.date.y}-${route.date.m}-${route.date.d}` : 'today'} />;
 }

@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { control, getLyrics, type Lyrics, type Now } from './api.ts';
 import { usePalette } from './color.ts';
+import { Standby } from './Standby.tsx';
 
 const FLOAT_KEY = 'cover-float';
+/** How long playback must stay stopped (with the pointer at rest) before the standby screen takes over. */
+const STANDBY_DELAY_MS = 10_000;
 
 const fmt = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -80,6 +83,15 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
   const rootRef = useRef<HTMLDivElement>(null);
   const fs = useFullscreen(rootRef);
 
+  // Standby: fullscreen, nothing playing, and nobody touching the mouse for a while.
+  const stopped = !now || !now.isPlaying;
+  const [standby, setStandby] = useState(false);
+  useEffect(() => {
+    if (!fs.active || !fs.idle || !stopped) { setStandby(false); return; }
+    const id = setTimeout(() => setStandby(true), STANDBY_DELAY_MS);
+    return () => clearTimeout(id);
+  }, [fs.active, fs.idle, stopped]);
+
   // "F" toggles fullscreen; Esc is handled by the browser.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -120,6 +132,8 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
       {track?.imageM && <img className="blob-a" src={track.imageM} alt="" key={track.imageM} />}
       <div className="blob-b" aria-hidden="true" />
       <div className="np-veil" aria-hidden="true" />
+
+      {standby && <Standby />}
 
       <div className="np-wrap">
         <header className="np-header">
