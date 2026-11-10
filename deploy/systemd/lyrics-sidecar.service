@@ -1,0 +1,18 @@
+# Example unit: adjust User, the paths and the binary to your machine.
+[Unit]
+Description=Listening Log Spotify lyrics sidecar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=listening
+WorkingDirectory=/opt/spotify-calendar
+Environment=LYRICS_CACHE_DIR=/opt/spotify-calendar/data/spotify
+Environment=LYRICS_BIND=127.0.0.1:8899
+ExecStart=/opt/spotify-calendar/lyrics-sidecar/target/release/lyrics-sidecar
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

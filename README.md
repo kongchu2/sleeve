@@ -1,4 +1,4 @@
-# Listening Log
+# spotify-calendar
 
 Your Spotify listening history as a calendar of album covers, plus a Now Playing screen that takes on the colour of the album and scrolls synced lyrics.
 
@@ -83,6 +83,27 @@ The server listens on `127.0.0.1` only. To reach it from other devices, put it b
 ### Optional: archive your history to a git repository
 
 `server/worker.ts` is a standalone collector that also publishes every play to a separate git repository as JSON Lines (`plays/YYYY-MM.jsonl`), pushing at most every 15 minutes, and restores the database from it on start. To use it, run the web server with `COLLECT=0`, run `npm run worker` alongside it, and set `DATA_REPO_DIR` to a clone of your archive repository that can push.
+
+## Optional: Spotify's own lyrics (sidecar)
+
+LRCLIB does not have every track. `lyrics-sidecar/` is a small Rust program that
+signs in as a Spotify client (via [librespot](https://github.com/librespot-org/librespot))
+and serves Spotify's own, usually line-synced, lyrics on localhost; the server
+uses them first and falls back to LRCLIB. It needs Rust and a one-time sign-in.
+
+```sh
+cd lyrics-sidecar
+cargo build --release
+./target/release/lyrics-sidecar --login     # opens a browser; authorise once
+```
+
+Then set `SPOTIFY_LYRICS_URL=http://127.0.0.1:8899` in `.env` and run the binary
+alongside the server (an example systemd unit is in `deploy/systemd/`).
+
+This uses an undocumented Spotify endpoint through a real client login, so it is
+a gray area under Spotify's terms, stores a reusable account credential on disk
+(`data/spotify/credentials.json`), and can break if Spotify changes things. It is
+off unless `SPOTIFY_LYRICS_URL` is set.
 
 ## Configuration
 
