@@ -45,14 +45,17 @@ a { color: inherit; }
 .nav:hover:not(:disabled) { background: #24242c; }
 .nav:disabled { opacity: 0.35; cursor: default; }
 
-.pill { display: flex; align-items: center; gap: 14px; max-width: 100%; min-height: 44px; padding: 10px 18px 10px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); text-decoration: none; }
-.pill:hover { background: #1f1f26; }
-.pill-art { flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #24242c; }
-.pill-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pill-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--point); transition: color 0.6s; }
-.pill-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
-.eq { flex: none; display: flex; align-items: flex-end; gap: 3px; height: 18px; margin-left: 6px; }
-.eq span { display: block; width: 3px; height: 18px; border-radius: 2px; background: var(--point); transform-origin: 50% 100%; animation: eq 1s ease-in-out infinite; }
+.now-card { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); text-decoration: none; }
+.now-card:hover { background: #1f1f26; }
+.now-card-art { flex: none; width: 76px; height: 76px; border-radius: 8px; object-fit: cover; background: #24242c; }
+.now-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.now-card-label { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--point); transition: color 0.6s; }
+.now-card-title { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-card-artist { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-card-bar { display: block; height: 3px; margin-top: 6px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.now-card-bar span { display: block; height: 3px; border-radius: 2px; background: var(--point); transition: background-color 0.6s; }
+.eq { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.eq span { display: block; width: 3px; height: 12px; border-radius: 2px; background: var(--point); transform-origin: 50% 100%; animation: eq 1s ease-in-out infinite; }
 .eq span:nth-child(2) { animation-delay: -0.35s; }
 .eq span:nth-child(3) { animation-delay: -0.7s; }
 .eq.is-paused span { animation-play-state: paused; }
@@ -88,7 +91,6 @@ a { color: inherit; }
 .day-big { font-family: var(--display); font-weight: 800; font-size: 128px; line-height: 0.8; letter-spacing: -0.05em; color: var(--accent); transition: color 0.5s; }
 .day-meta { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; }
 .day-weekday { font-size: 18px; font-weight: 700; }
-.now-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 18px; border-radius: 12px; background: var(--accent); color: #0b0b0e; font-weight: 700; font-size: 15px; text-decoration: none; transition: background-color 0.5s; }
 
 .hours { display: flex; flex-direction: column; gap: 6px; }
 .hours-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
@@ -195,9 +197,10 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .recap-rank { flex: none; width: 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
 /* ───── Now Playing ───── */
-/* --cover is derived from the viewport height minus everything stacked around it (padding, header, titles,
-   progress, controls), so the left column always fits on screen. */
-.np { --pad: clamp(16px, 3.4vw, 48px); --gap: clamp(28px, 4vw, 56px); --cover: clamp(220px, calc(100vh - 2 * var(--pad) - var(--gap) - 374px), 440px); --ground: #0b0b0e; --soft: #f4f2ec; --point: #f4f2ec; position: relative; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: var(--ground); color: var(--soft); transition: background-color 1.2s, color 1.2s; }
+/* --fit is the viewport height minus everything stacked around the cover (padding, header, titles, progress,
+   the gaps between them). --cover is that, capped, times the user's --cover-scale; it never grows past --fit, so the left
+   column always fits on screen. */
+.np { --pad: clamp(16px, 3.4vw, 48px); --gap: clamp(28px, 4vw, 56px); --cover-scale: 1; --cover-cap: 440px; --fit: calc(100vh - 2 * var(--pad) - var(--gap) - 286px); --cover: max(220px * min(1, var(--cover-scale)), min(var(--fit), clamp(220px, var(--fit), var(--cover-cap)) * var(--cover-scale))); --ground: #0b0b0e; --soft: #f4f2ec; --point: #f4f2ec; position: relative; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: var(--ground); color: var(--soft); transition: background-color 1.2s, color 1.2s; }
 .blob-a { position: absolute; top: -15%; left: -15%; width: 130%; height: 130%; object-fit: cover; filter: blur(90px) saturate(1.7) brightness(0.5); pointer-events: none; animation: drift-a 40s ease-in-out infinite alternate, fade-blob 1.4s both; }
 .blob-b { position: absolute; bottom: -420px; right: -300px; width: 900px; height: 900px; border-radius: 50%; filter: blur(150px); opacity: 0.45; pointer-events: none; background-color: var(--point); transition: background-color 1.2s; animation: drift-b 34s ease-in-out infinite alternate; }
 .np-veil { position: absolute; inset: 0; pointer-events: none; opacity: 0.38; background-color: var(--ground); transition: background-color 1.2s; }
@@ -207,11 +210,13 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .back { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: -11px; border-radius: 50%; color: #fff; opacity: 0.8; transition: opacity 0.2s, background-color 0.2s; }
 .back:hover { opacity: 1; background-color: rgba(255, 255, 255, 0.12); }
 
-.fs-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-right: -11px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; opacity: 0.8; cursor: pointer; transition: opacity 0.2s, background-color 0.2s; }
+.np-tools { display: flex; align-items: center; gap: 2px; margin-right: -11px; }
+.fs-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; opacity: 0.8; cursor: pointer; transition: opacity 0.2s, background-color 0.2s; }
 .fs-btn:hover { opacity: 1; background-color: rgba(255, 255, 255, 0.12); }
-.np-header, .np-controls, .np-progress { transition: opacity 0.6s; }
+.fs-btn:disabled { opacity: 0.3; background: none; cursor: default; }
+.np-header { transition: opacity 0.6s; }
 /* Fullscreen: the header floats over the corner (it fades out anyway), freeing its row for a bigger cover. */
-.np.is-fs { width: 100vw; height: 100vh; --pad: clamp(20px, 4vw, 72px); --cover: clamp(220px, min(calc(100vh - 2 * var(--pad) - 330px), 42vw), 640px); }
+.np.is-fs { width: 100vw; height: 100vh; --pad: clamp(20px, 4vw, 72px); --cover-cap: 640px; --fit: min(calc(100vh - 2 * var(--pad) - 242px), 42vw); }
 /* The content column must not clip (a scroll container would cut the cover's glow off at its edges).
    Only on narrow screens, where the lyrics stack below and the column spans the full width, may it scroll. */
 .np.is-fs .np-wrap { max-width: 1760px; min-height: 0; }
@@ -223,13 +228,13 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .np.is-fs .np-titles h1 { font-size: clamp(26px, 2.6vw, 44px); }
 .np.is-idle, .np.is-idle * { cursor: none; }
 /* Hidden chrome must not swallow the click that wakes it up. */
-.np.is-idle .np-header, .np.is-idle .np-controls { opacity: 0; pointer-events: none; }
+.np.is-idle .np-header { opacity: 0; pointer-events: none; }
 .np-idle { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
 .np-idle h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(32px, 5vw, 60px); letter-spacing: -0.03em; }
 .np-idle p { margin: 0; font-size: 17px; color: var(--muted); }
 
 .np-main { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: clamp(32px, 6vw, 104px); }
-.np-left { flex: 0 1 var(--cover); min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.np-left { flex: 0 1 var(--cover); min-width: 0; display: flex; flex-direction: column; gap: 24px; transition: flex-basis 0.3s var(--ease); }
 .cover { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; box-shadow: 0 60px 140px -30px color-mix(in srgb, var(--point) 70%, transparent), 0 24px 60px -20px rgba(0, 0, 0, 0.6); animation: fade-cover 0.8s both; }
 .cover-blank { background: rgba(255, 255, 255, 0.08); }
 .cover-btn { display: block; width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; cursor: pointer; }
@@ -243,19 +248,12 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
 .bar-fill { height: 4px; border-radius: 2px; background-color: var(--point); transition: width 0.2s linear, background-color 1.2s; }
 .np-times { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; }
-.np-controls { display: flex; align-items: center; justify-content: center; gap: 36px; }
-.ctl { width: 56px; height: 56px; border: 0; background: none; color: #fff; opacity: 0.9; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: transform 0.2s var(--ease), opacity 0.2s; }
-.ctl:hover { transform: scale(1.12); opacity: 1; }
-.ctl:active { transform: scale(0.94); }
-.ctl-main { width: 64px; height: 64px; opacity: 1; }
-
-.np-notice { font-size: 13px; }
 
 .np-right { flex: 1 1 420px; min-width: 0; font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.3vw, 48px); letter-spacing: -0.025em; }
 /* Side padding (cancelled by the negative margin) leaves room for the active line's glow inside the clip box. */
 .lyrics { height: min(72vh, 12.5em); padding: 3.4em 64px 0; margin: 0 -64px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 62%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 62%, transparent 100%); }
 .lyrics-inner { position: relative; display: flex; flex-direction: column; align-items: flex-start; transition: transform 0.7s var(--ease); }
-.line { display: block; max-width: 100%; padding: 0.36em 0; border: 0; background: none; text-align: left; line-height: 1.18; letter-spacing: inherit; cursor: pointer; color: #fff; opacity: 0.34; transform: scale(0.86); transform-origin: 0 50%; transition: opacity 0.6s, transform 0.7s var(--ease), filter 0.6s; }
+.line { display: block; max-width: 100%; padding: 0.36em 0; border: 0; background: none; text-align: left; line-height: 1.18; letter-spacing: inherit; color: #fff; opacity: 0.34; transform: scale(0.86); transform-origin: 0 50%; transition: opacity 0.6s, transform 0.7s var(--ease), filter 0.6s; }
 .line.is-past { opacity: 0.2; }
 .line.is-active { opacity: 1; transform: none; text-shadow: 0 0 36px color-mix(in srgb, var(--point) 25%, transparent); }
 .line:hover { opacity: 1; filter: none !important; }
@@ -287,6 +285,5 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   .day-filled, .eq span, .live, .blob-a, .blob-b, .cover, .cover-btn.is-floating, .standby-wall, .standby-clock { animation: none; }
-  .ctl:hover { transform: none; }
-  .lyrics-inner, .line { transition: none; }
+  .lyrics-inner, .line, .np-left { transition: none; }
 }

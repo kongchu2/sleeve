@@ -69,7 +69,7 @@ export function App() {
       </Gate>
     );
 
-  if (view === 'now') return <NowPlaying now={now} refresh={refreshNow} />;
+  if (view === 'now') return <NowPlaying now={now} />;
   if (view === 'year') return <YearView />;
   if (view === 'albums') return <FullAlbums />;
   if (view === 'import') return <ImportHistory />;
@@ -81,7 +81,7 @@ export function App() {
 function Gate({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {
   return (
     <div className="gate">
-      <div className="mono-label">LISTENING LOG</div>
+      <div className="mono-label">SLEEVE</div>
       <h1>{title}</h1>
       <p>{body}</p>
       {children}

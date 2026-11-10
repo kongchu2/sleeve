@@ -10,7 +10,7 @@ import * as spotify from './spotify.ts';
 import { dayNotes, fullAlbums, recap, wallCovers } from './stats.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
-// Loopback by default: the API can control playback, so only widen this behind something that restricts access.
+// Loopback by default: the API exposes your history and can sign you out, so only widen this behind something that restricts access.
 const HOST = process.env.HOST ?? '127.0.0.1';
 const APP_URL = process.env.APP_URL ?? '/';
 const SYNC_INTERVAL = 2 * 60 * 1000;
@@ -117,11 +117,6 @@ app.get('/api/lyrics', async (c) => {
   return c.json(await getLyrics(q.id, q.name, q.artists, q.album ?? '', Number(q.duration) || 0));
 });
 
-app.post('/api/player/:action', async (c) => {
-  const status = await spotify.control(c.req.param('action'), Number(c.req.query('ms')));
-  return c.json({ ok: status >= 200 && status < 300, status });
-});
-
 if (existsSync('dist/index.html')) {
   // Hashed assets never change; everything else (the page itself) must be revalidated so updates show up on reload.
   app.use('*', async (c, next) => {
@@ -133,7 +128,7 @@ if (existsSync('dist/index.html')) {
 }
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
-  console.log(`listening-calendar server on http://${HOST}:${PORT}`);
+  console.log(`sleeve server on http://${HOST}:${PORT}`);
   if (!spotify.isConfigured()) console.log('Spotify credentials missing: copy .env.example to .env and fill it in.');
   // COLLECT=0 leaves collection to the separate worker (server/worker.ts).
   if (process.env.COLLECT !== '0') {

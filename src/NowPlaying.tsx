@@ -1,9 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { control, getLyrics, type Lyrics, type Now } from './api.ts';
+import { getLyrics, type Lyrics, type Now } from './api.ts';
 import { usePalette } from './color.ts';
 import { Standby } from './Standby.tsx';
 
 const FLOAT_KEY = 'cover-float';
+/** The cover's size is the automatic fit times this factor, chosen by the user and remembered in this browser. */
+const SCALE_KEY = 'cover-scale';
+const SCALE_MIN = 0.5;
+const SCALE_MAX = 1.5;
+const SCALE_STEP = 0.1;
+const clampScale = (n: number) => Math.round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, n)) * 10) / 10;
 /** How long playback must stay stopped (with the pointer at rest) before the standby screen takes over. */
 const STANDBY_DELAY_MS = 10_000;
 
@@ -64,12 +70,11 @@ function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
   return { active, idle, toggle };
 }
 
-export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => Promise<void> }) {
+export function NowPlaying({ now }: { now: Now | null }) {
   const track = now?.track ?? null;
   const palette = usePalette(track?.imageS);
   const pos = usePosition(now);
   const [lyrics, setLyrics] = useState<Lyrics | 'loading' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   // The cover floats by default; clicking it turns that off (remembered in this browser).
   const [floating, setFloating] = useState(() => {
     try { return localStorage.getItem(FLOAT_KEY) !== 'off'; } catch { return true; }
@@ -80,6 +85,16 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
       return !on;
     });
   };
+  const [scale, setScale] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(SCALE_KEY));
+      return saved > 0 ? clampScale(saved) : 1;
+    } catch { return 1; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SCALE_KEY, String(scale)); } catch { /* storage unavailable */ }
+  }, [scale]);
+  const resize = (steps: number) => setScale((s) => clampScale(s + steps * SCALE_STEP));
   const rootRef = useRef<HTMLDivElement>(null);
   const fs = useFullscreen(rootRef);
 
@@ -92,12 +107,16 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
     return () => clearTimeout(id);
   }, [fs.active, fs.idle, stopped]);
 
-  // "F" toggles fullscreen; Esc is handled by the browser.
+  // "F" toggles fullscreen (Esc is handled by the browser); "-" / "+" resize the cover and "0" resets it.
+  // With Ctrl/Cmd held those keys are the browser's own zoom, so they are left alone.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat || e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      fs.toggle();
+      if (e.key === '-' || e.key === '_') resize(-1);
+      else if (e.key === '=' || e.key === '+') resize(1);
+      else if (e.key === '0') setScale(1);
+      else if (!e.repeat && e.key.toLowerCase() === 'f') fs.toggle();
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
@@ -117,15 +136,7 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackId]);
 
-  const act = async (action: Parameters<typeof control>[0], ms?: number) => {
-    const res = await control(action, ms);
-    if (res.status === 403) setNotice('Playback control needs a Spotify Premium account.');
-    else if (res.status === 404) setNotice('No active Spotify device found.');
-    else setNotice(null);
-    setTimeout(() => void refresh(), 350);
-  };
-
-  const style = { '--ground': palette.ground, '--soft': palette.soft, '--point': palette.point } as CSSProperties;
+  const style = { '--ground': palette.ground, '--soft': palette.soft, '--point': palette.point, '--cover-scale': scale } as CSSProperties;
 
   return (
     <div ref={rootRef} className={'np' + (fs.active ? ' is-fs' : '') + (fs.idle ? ' is-idle' : '')} style={style}>
@@ -140,11 +151,19 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
           <a className="back" href="#/" aria-label="Back to calendar">
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
           </a>
-          <button className="fs-btn" aria-label={fs.active ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fs.active} onClick={fs.toggle}>
-            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              {fs.active ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
-            </svg>
-          </button>
+          <div className="np-tools">
+            <button className="fs-btn" aria-label="Smaller cover" title="Smaller cover (-)" disabled={scale <= SCALE_MIN} onClick={() => resize(-1)}>
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /></svg>
+            </button>
+            <button className="fs-btn" aria-label="Larger cover" title="Larger cover (+)" disabled={scale >= SCALE_MAX} onClick={() => resize(1)}>
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5v14" /></svg>
+            </button>
+            <button className="fs-btn" aria-label={fs.active ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fs.active} onClick={fs.toggle}>
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                {fs.active ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+              </svg>
+            </button>
+          </div>
         </header>
 
         {!now || !track ? (
@@ -179,26 +198,10 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
                   </div>
                   <div className="np-times"><span>{fmt(pos)}</span><span>{fmt(track.durationMs)}</span></div>
                 </div>
-                <div className="np-controls">
-                  <button className="ctl" aria-label="Previous track" onClick={() => act('previous')}>
-                    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"><path d="M19 6v12l-9-6z" /><path d="M6 6v12" fill="none" strokeWidth="2.4" /></svg>
-                  </button>
-                  <button className="ctl ctl-main" aria-label={now.isPlaying ? 'Pause' : 'Play'} onClick={() => act(now.isPlaying ? 'pause' : 'play')}>
-                    {now.isPlaying ? (
-                      <svg aria-hidden="true" width="44" height="44" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-                    ) : (
-                      <svg aria-hidden="true" width="44" height="44" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"><path d="M8 5l11 7-11 7z" /></svg>
-                    )}
-                  </button>
-                  <button className="ctl" aria-label="Next track" onClick={() => act('next')}>
-                    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"><path d="M5 6v12l9-6z" /><path d="M18 6v12" fill="none" strokeWidth="2.4" /></svg>
-                  </button>
-                </div>
-                {notice && <div className="np-notice" role="status">{notice}</div>}
               </section>
 
               <section className="np-right" aria-label="Lyrics">
-                <LyricsView lyrics={lyrics} pos={pos} onSeek={(ms) => act('seek', ms)} />
+                <LyricsView lyrics={lyrics} pos={pos} />
               </section>
             </main>
         )}
@@ -207,17 +210,17 @@ export function NowPlaying({ now, refresh }: { now: Now | null; refresh: () => P
   );
 }
 
-function LyricsView({ lyrics, pos, onSeek }: { lyrics: Lyrics | 'loading' | null; pos: number; onSeek: (ms: number) => void }) {
+function LyricsView({ lyrics, pos }: { lyrics: Lyrics | 'loading' | null; pos: number }) {
   // No lyrics, an instrumental, or still loading: leave the space empty.
   if (!lyrics || lyrics === 'loading' || lyrics.instrumental) return null;
-  if (lyrics.synced) return <SyncedLyrics lines={lyrics.synced} pos={pos} onSeek={onSeek} />;
+  if (lyrics.synced) return <SyncedLyrics lines={lyrics.synced} pos={pos} />;
   if (lyrics.plain) return <div className="lyrics-plain">{lyrics.plain}</div>;
   return null;
 }
 
-function SyncedLyrics({ lines, pos, onSeek }: { lines: { t: number; text: string }[]; pos: number; onSeek: (ms: number) => void }) {
+function SyncedLyrics({ lines, pos }: { lines: { t: number; text: string }[]; pos: number }) {
   const active = lines.findLastIndex((l) => l.t <= pos);
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const refs = useRef<(HTMLDivElement | null)[]>([]);
   const innerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
 
@@ -235,16 +238,15 @@ function SyncedLyrics({ lines, pos, onSeek }: { lines: { t: number; text: string
     <div className="lyrics">
       <div className="lyrics-inner" ref={innerRef} style={{ transform: `translateY(${-offset}px)` }}>
         {lines.map((l, i) => (
-          <button
+          <div
             key={i}
             ref={(el) => { refs.current[i] = el; }}
             className={'line' + (i === active ? ' is-active' : i < active ? ' is-past' : '')}
             aria-current={i === active ? 'true' : undefined}
             style={{ filter: i === active ? undefined : `blur(${Math.min(Math.abs(i - Math.max(0, active)) * 0.7, 3.5)}px)` }}
-            onClick={() => onSeek(l.t)}
           >
             {l.text}
-          </button>
+          </div>
         ))}
       </div>
     </div>

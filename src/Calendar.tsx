@@ -211,7 +211,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
       <div className="wrap">
         <header className="cal-header">
           <div className="cal-title">
-            <div className="mono-label">LISTENING LOG · {ym.y}</div>
+            <div className="mono-label">SLEEVE · {ym.y}</div>
             <div className="cal-title-row">
               <h1>{MONTHS[ym.m]}</h1>
               <div className="nav-group">
@@ -233,7 +233,6 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
               <a href="#/import">Import history</a>
             </nav>
           </div>
-          {now && <NowPill now={now} />}
         </header>
 
         <main className="cal-main">
@@ -285,6 +284,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
 
           <aside className="day-panel" aria-label="Selected day">
             <div className="day-panel-inner">
+            {now && <NowCard now={now} />}
             <div className="day-head">
               <div className="day-big">{two(sel)}</div>
               <div className="day-meta">
@@ -313,13 +313,6 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                   </a>
                 ))}
               </div>
-            )}
-
-            {selIsToday && now && (
-              <a className="now-cta" href="#/now">
-                <span>See what's playing now</span>
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </a>
             )}
 
             {selTracks.length > 0 ? (
@@ -381,16 +374,25 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   );
 }
 
-function NowPill({ now }: { now: Now }) {
-  const point = usePalette(now.track.imageS).point;
+/** What is playing right now, at the top of the day panel; opens the Now Playing screen. */
+function NowCard({ now }: { now: Now }) {
+  const { track } = now;
+  const point = usePalette(track.imageS).point;
+  const elapsed = now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs;
+  const progress = Math.min(1, Math.max(0, elapsed / track.durationMs));
+  const art = track.imageM ?? track.imageS;
   return (
-    <a className="pill" href="#/now" style={{ '--point': point } as CSSProperties}>
-      {now.track.imageS ? <img className="pill-art" src={now.track.imageS} alt="" /> : <span className="pill-art" />}
-      <span className="pill-text">
-        <span className="pill-label">{now.isPlaying ? 'NOW PLAYING' : 'PAUSED'}</span>
-        <span className="pill-title">{now.track.name} — {now.track.artists}</span>
+    <a className="now-card" href="#/now" style={{ '--point': point } as CSSProperties}>
+      {art ? <img className="now-card-art" src={art} alt="" /> : <span className="now-card-art" />}
+      <span className="now-card-text">
+        <span className="now-card-label">
+          <span className={'eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
+          {now.isPlaying ? 'NOW PLAYING' : 'PAUSED'}
+        </span>
+        <span className="now-card-title">{track.name}</span>
+        <span className="now-card-artist">{track.artists}</span>
+        <span className="now-card-bar" aria-hidden="true"><span style={{ width: progress * 100 + '%' }} /></span>
       </span>
-      <span className={'eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
     </a>
   );
 }

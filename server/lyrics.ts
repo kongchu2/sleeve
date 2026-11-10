@@ -14,7 +14,7 @@ type LrclibItem = {
 };
 
 const BASE = 'https://lrclib.net/api';
-const HEADERS = { 'User-Agent': 'listening-calendar/0.1 (personal project)' };
+const HEADERS = { 'User-Agent': 'sleeve/0.1 (personal project)' };
 const MISS_TTL = 24 * 60 * 60 * 1000;
 const NONE: Lyrics = { synced: null, plain: null, instrumental: false };
 

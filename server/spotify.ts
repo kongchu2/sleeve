@@ -9,7 +9,6 @@ const SCOPES = [
   'user-read-recently-played',
   'user-read-currently-playing',
   'user-read-playback-state',
-  'user-modify-playback-state',
 ].join(' ');
 
 type Tokens = { access_token: string; refresh_token: string; expires_at: number };
@@ -223,22 +222,4 @@ export async function nowPlaying(): Promise<{ isPlaying: boolean; progressMs: nu
   const track = toTrackInfo(json.item);
   if (!track) return null;
   return { isPlaying: json.is_playing, progressMs: json.progress_ms ?? 0, track };
-}
-
-const CONTROLS: Record<string, { method: string; path: string }> = {
-  play: { method: 'PUT', path: '/me/player/play' },
-  pause: { method: 'PUT', path: '/me/player/pause' },
-  next: { method: 'POST', path: '/me/player/next' },
-  previous: { method: 'POST', path: '/me/player/previous' },
-};
-
-/** Playback control. Spotify answers 403 for non-Premium accounts. */
-export async function control(action: string, positionMs?: number): Promise<number> {
-  if (action === 'seek') {
-    const ms = Math.max(0, Math.round(positionMs ?? 0));
-    return (await api('/me/player/seek?position_ms=' + ms, { method: 'PUT' })).status;
-  }
-  const c = CONTROLS[action];
-  if (!c) return 400;
-  return (await api(c.path, { method: c.method })).status;
 }

@@ -112,8 +112,3 @@ export const getLyrics = (t: Track) =>
     '/api/lyrics?' +
       new URLSearchParams({ id: t.id, name: t.name, artists: t.artists, album: t.album, duration: String(t.durationMs) }),
   );
-
-export async function control(action: 'play' | 'pause' | 'next' | 'previous' | 'seek', ms?: number) {
-  const res = await fetch(`/api/player/${action}` + (ms === undefined ? '' : `?ms=${Math.round(ms)}`), { method: 'POST' });
-  return (await res.json()) as { ok: boolean; status: number };
-}

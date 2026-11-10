@@ -2,7 +2,7 @@
 name = "lyrics-sidecar"
 version = "0.1.0"
 edition = "2021"
-description = "Fetches Spotify's own synced lyrics for the Listening Log app, via librespot."
+description = "Fetches Spotify's own synced lyrics for the Sleeve app, via librespot."
 license = "MIT"
 
 [[bin]]

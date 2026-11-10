@@ -38,7 +38,7 @@ if (archiveEnabled()) {
   console.log('[archive] DATA_REPO_DIR is not a git repository: archiving is off.');
 }
 
-console.log('listening-calendar worker started');
+console.log('sleeve worker started');
 void tick();
 setInterval(tick, SYNC_INTERVAL);
 

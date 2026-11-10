@@ -1,4 +1,4 @@
-//! Fetches Spotify's own lyrics for one track, for the Listening Log web app.
+//! Fetches Spotify's own lyrics for one track, for the Sleeve web app.
 //!
 //! The public Web API has no lyrics; Spotify's clients read an internal
 //! `color-lyrics` endpoint that a developer token cannot reach. This process

@@ -1,4 +1,4 @@
-# spotify-calendar
+# Sleeve
 
 Your Spotify listening history as a calendar of album covers, plus a Now Playing screen that takes on the colour of the album and scrolls synced lyrics.
 
@@ -23,7 +23,7 @@ To fill in the past, request your **Extended streaming history** at <https://www
 
 ## What you need
 
-- A Spotify account. Spotify currently requires the owner of a developer app to have **Premium**; playback controls in the app need Premium too.
+- A Spotify account. Spotify currently requires the owner of a developer app to have **Premium**.
 - Docker, or Node.js 24+.
 
 ## 1. Create a Spotify app
@@ -36,8 +36,8 @@ To fill in the past, request your **Extended streaming history** at <https://www
 ## 2. Configure
 
 ```sh
-git clone https://github.com/kongchu2/spotify-calendar.git
-cd spotify-calendar
+git clone https://github.com/kongchu2/sleeve.git
+cd sleeve
 cp .env.example .env      # then put your Client ID and secret in .env
 ```
 
@@ -75,7 +75,7 @@ npm run dev               # http://127.0.0.1:5180, API on :8787
 
 ## Running on a server
 
-The server listens on `127.0.0.1` only. To reach it from other devices, put it behind something that provides **HTTPS and access control** (a private network such as Tailscale, or a reverse proxy with authentication) — anyone who can reach the API can control your playback.
+The server listens on `127.0.0.1` only. To reach it from other devices, put it behind something that provides **HTTPS and access control** (a private network such as Tailscale, or a reverse proxy with authentication) — anyone who can reach the API can read your listening history, import plays into it, and sign you out.
 
 - Spotify requires HTTPS for non-loopback redirect URIs. Either register `https://your-host/auth/callback` in the Spotify dashboard and set `SPOTIFY_REDIRECT_URI`, or sign in once on your own machine and copy `data/listening.db` to the server.
 - Example systemd units are in `deploy/systemd/`.
