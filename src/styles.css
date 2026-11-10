@@ -63,8 +63,8 @@ a { color: inherit; }
 .weekdays { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
 .day-future { aspect-ratio: 1 / 1; border-radius: 10px; border: 1px dashed #2a2a33; padding: 8px; font-family: var(--mono); font-size: 12px; color: #8a8894; }
-.day { position: relative; aspect-ratio: 1 / 1; border: 0; border-radius: 10px; cursor: pointer; outline: 2px solid transparent; outline-offset: 3px; transition: transform 0.28s var(--ease), outline-color 0.35s; }
-.day:hover { transform: scale(1.08); z-index: 3; }
+.day { position: relative; aspect-ratio: 1 / 1; border: 0; border-radius: 10px; cursor: pointer; outline: 2px solid transparent; outline-offset: 3px; transition: outline-color 0.35s; }
+.day:hover:not(.is-selected) { outline-color: rgba(255, 255, 255, 0.28); }
 .day.is-selected { outline-color: var(--accent); }
 .day:focus-visible { outline-color: #fff; }
 .day-empty { background: #131318; padding: 8px; display: flex; align-items: flex-start; font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -188,6 +188,6 @@ a { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .day-filled, .eq span, .live, .blob-a, .blob-b, .cover { animation: none; }
-  .day:hover, .ctl:hover { transform: none; }
+  .ctl:hover { transform: none; }
   .lyrics-inner, .line { transition: none; }
 }

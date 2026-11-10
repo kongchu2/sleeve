@@ -68,6 +68,11 @@ app.post('/api/player/:action', async (c) => {
 });
 
 if (existsSync('dist/index.html')) {
+  // Hashed assets never change; everything else (the page itself) must be revalidated so updates show up on reload.
+  app.use('*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', c.req.path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+  });
   app.use('*', serveStatic({ root: './dist' }));
   app.get('*', serveStatic({ path: './dist/index.html' }));
 }
