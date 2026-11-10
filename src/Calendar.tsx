@@ -46,19 +46,22 @@ function tracksOf(plays: Play[]): DayTrack[] {
   return [...map.values()].sort((a, b) => a.first - b.first);
 }
 
-type AlbumGroup = DayAlbum & { artists: string; minutes: number; tracks: DayTrack[] };
+type AlbumGroup = DayAlbum & { artists: string; minutes: number; tracks: DayTrack[]; last: number };
 
-/** A day's plays folded into one entry per album, most played first, each with its tracks in listening order. */
+/** A day's plays folded into one entry per album, most recently played first, each with its tracks newest first. */
 function groupsOf(plays: Play[]): AlbumGroup[] {
-  return albumsOf(plays).map((album) => {
-    const own = plays.filter((p) => p.album_id === album.id);
-    return {
-      ...album,
-      artists: own[0].artists,
-      minutes: Math.round(own.reduce((a, p) => a + p.duration_ms, 0) / 60_000),
-      tracks: tracksOf(own),
-    };
-  });
+  return albumsOf(plays)
+    .map((album) => {
+      const own = plays.filter((p) => p.album_id === album.id);
+      return {
+        ...album,
+        artists: own[0].artists,
+        minutes: Math.round(own.reduce((a, p) => a + p.duration_ms, 0) / 60_000),
+        tracks: tracksOf(own).reverse(),
+        last: Math.max(...own.map((p) => p.played_at)),
+      };
+    })
+    .sort((a, b) => b.last - a.last);
 }
 
 const MIN_FULL_ALBUM_TRACKS = 4;
@@ -88,22 +91,12 @@ function fullAlbumsByDay(plays: Play[]): Map<number, Set<string>> {
   return out;
 }
 
-function DiscIcon({ size }: { size: number }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-/** "FULL ALBUM" marker tinted with the album's own point colour. */
+/** "ALL TRACKS" marker (the album was heard in full) tinted with the album's own point colour. */
 function FullAlbumTag({ imageS }: { imageS: string | null }) {
   const point = usePalette(imageS).point;
   return (
     <span className="full-tag" style={{ color: point }}>
-      <DiscIcon size={12} />
-      FULL ALBUM
+      ALL TRACKS
     </span>
   );
 }
@@ -139,6 +132,21 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
     const id = isCurrentMonth ? setInterval(load, 60_000) : undefined;
     return () => { live = false; clearInterval(id); };
   }, [ym.y, ym.m, isCurrentMonth]);
+
+  // A track change means the previous track just ended and the server is pulling it into the history:
+  // reload shortly after (twice, as Spotify can be slow to list it) rather than waiting for the minute tick.
+  const nowId = now?.track.id ?? null;
+  useEffect(() => {
+    if (!isCurrentMonth) return;
+    let live = true;
+    const load = () =>
+      getPlays(new Date(ym.y, ym.m, 1).getTime(), new Date(ym.y, ym.m + 1, 1).getTime()).then(
+        (rows) => { if (live) setPlays(rows); },
+        () => {},
+      );
+    const timers = [setTimeout(load, 8_000), setTimeout(load, 35_000)];
+    return () => { live = false; timers.forEach(clearTimeout); };
+  }, [nowId, ym.y, ym.m, isCurrentMonth]);
 
   const byDay = useMemo(() => {
     const map = new Map<number, Play[]>();
@@ -201,9 +209,12 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
     setPicked(null);
   };
 
+  // The resting backdrop: what is playing now, or else the selected day's most played album.
+  const ambient = now?.track.imageM ?? now?.track.imageS ?? selAlbums[0]?.image;
+
   return (
     <div className="page" style={{ '--accent': accent } as CSSProperties}>
-      {selAlbums[0]?.image && <img className="ambient" src={selAlbums[0].image} alt="" key={selAlbums[0].image} />}
+      {ambient && <img className="ambient" src={ambient} alt="" key={ambient} />}
       <div className={'hover-bg' + (bg.on ? ' is-on' : '')} aria-hidden="true">
         {bg.prev && <img src={bg.prev} alt="" key={'p' + bg.prev} />}
         {bg.cur && <img className="hover-bg-cur" src={bg.cur} alt="" key={bg.cur} />}
@@ -251,7 +262,6 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                 const d = i + 1;
                 if (d > lastPastDay) return <div key={d} className="day-future">{d}</div>;
                 const albums = albumsOf(byDay.get(d) ?? []).slice(0, 4);
-                const full = fullByDay.get(d);
                 const selected = d === sel;
                 if (!albums.length)
                   return (
@@ -264,14 +274,13 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                     key={d}
                     className={'day day-filled' + (selected ? ' is-selected' : '')}
                     style={{ animationDelay: d * 18 + 'ms' }}
-                    aria-label={`${MONTHS[ym.m]} ${d}, ${plural(albums.length, 'album')}${full?.size ? `, ${plural(full.size, 'full album')}` : ''}`}
+                    aria-label={`${MONTHS[ym.m]} ${d}, ${plural(albums.length, 'album')}`}
                     aria-pressed={selected}
                     onClick={() => setPicked(d)}
                   >
                     {albums.map((a, k) => (
                       <span key={a.id} className="tile" onPointerEnter={() => showBg(a.image)} onPointerLeave={hideBg} style={{ gridColumn: MOSAIC[albums.length][k][0], gridRow: MOSAIC[albums.length][k][1] }}>
                         {a.image && <img src={a.image} alt="" loading="lazy" />}
-                        {full?.has(a.id) && <span className="full-badge" title="Full album"><DiscIcon size={12} /></span>}
                       </span>
                     ))}
                     <span className="day-num">{d}</span>
@@ -284,7 +293,6 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
 
           <aside className="day-panel" aria-label="Selected day">
             <div className="day-panel-inner">
-            {now && <NowCard now={now} />}
             <div className="day-head">
               <div className="day-big">{two(sel)}</div>
               <div className="day-meta">
@@ -294,6 +302,17 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                 </div>
               </div>
             </div>
+
+            {selTracks.length > 0 && (
+              <div className="hours">
+                <div className="hours-bars" aria-hidden="true">
+                  {hourImages.map((u, h) => <span key={h} style={u ? { background: points[u] ?? '#3A3A44' } : undefined} />)}
+                </div>
+                <div className="hours-labels" aria-hidden="true">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+                </div>
+              </div>
+            )}
 
             {notes && (notes.streak || notes.onThisDay.length > 0) && (
               <div className="notes">
@@ -315,16 +334,10 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
               </div>
             )}
 
+            {now && <NowCard now={now} />}
+
             {selTracks.length > 0 ? (
               <>
-                <div className="hours">
-                  <div className="hours-bars" aria-hidden="true">
-                    {hourImages.map((u, h) => <span key={h} style={u ? { background: points[u] ?? '#3A3A44' } : undefined} />)}
-                  </div>
-                  <div className="hours-labels" aria-hidden="true">
-                    <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
-                  </div>
-                </div>
                 <div className="albums">
                   {selGroups.map((g) => {
                     const open = openKey === dayKey + g.id;
@@ -374,25 +387,32 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   );
 }
 
-/** What is playing right now, at the top of the day panel; opens the Now Playing screen. */
+/** What is playing right now: a row pinned above the album list (it does not scroll with it), a size larger and in the cover's colour; opens the Now Playing screen. */
 function NowCard({ now }: { now: Now }) {
   const { track } = now;
   const point = usePalette(track.imageS).point;
-  const elapsed = now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs;
-  const progress = Math.min(1, Math.max(0, elapsed / track.durationMs));
+  // Re-render every second while playing so the progress line keeps moving between polls.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!now.isPlaying) return;
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [now.isPlaying]);
+  const elapsed = Math.min(track.durationMs, now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs);
   const art = track.imageM ?? track.imageS;
   return (
-    <a className="now-card" href="#/now" style={{ '--point': point } as CSSProperties}>
-      {art ? <img className="now-card-art" src={art} alt="" /> : <span className="now-card-art" />}
-      <span className="now-card-text">
-        <span className="now-card-label">
-          <span className={'eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
+    <a className="now-row" href="#/now" aria-label={`Open Now Playing: ${track.name} by ${track.artists}`} style={{ '--point': point } as CSSProperties}>
+      {art ? <img className="now-row-art" src={art} alt="" /> : <span className="now-row-art" />}
+      <span className="track-text">
+        <span className="now-row-state">
+          <span className={'now-row-eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
           {now.isPlaying ? 'NOW PLAYING' : 'PAUSED'}
         </span>
-        <span className="now-card-title">{track.name}</span>
-        <span className="now-card-artist">{track.artists}</span>
-        <span className="now-card-bar" aria-hidden="true"><span style={{ width: progress * 100 + '%' }} /></span>
+        <span className="now-row-name">{track.name}</span>
+        <span className="track-sub">{track.artists}</span>
       </span>
+      <svg className="now-row-go" aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+      <span className="now-row-bar" aria-hidden="true" style={{ width: (elapsed / track.durationMs) * 100 + '%' }} />
     </a>
   );
 }

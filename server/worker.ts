@@ -4,6 +4,7 @@
  */
 import { archiveEnabled, importArchive, pushArchive } from './archive.ts';
 import { collect } from './collector.ts';
+import { db } from './db.ts';
 import * as spotify from './spotify.ts';
 
 const SYNC_INTERVAL = 2 * 60 * 1000;
@@ -11,6 +12,9 @@ const PUSH_INTERVAL = Number(process.env.ARCHIVE_PUSH_MINUTES ?? 15) * 60 * 1000
 
 let dirty = true; // publish once on startup so the archive matches the database
 let lastPush = 0;
+let pushedCount = -1;
+
+const countPlays = () => (db.prepare('SELECT COUNT(*) AS n FROM plays').get() as { n: number }).n;
 
 function publish(force = false) {
   if (!archiveEnabled() || !dirty) return;
@@ -19,13 +23,15 @@ function publish(force = false) {
     if (pushArchive()) console.log('[archive] pushed');
     dirty = false;
     lastPush = Date.now();
+    pushedCount = countPlays();
   } catch (err) {
     console.error('[archive]', err instanceof Error ? err.message : err);
   }
 }
 
 async function tick() {
-  if ((await collect()) > 0) dirty = true;
+  // The web server also adds plays (a sync when a track ends, history imports), so compare the row count too.
+  if ((await collect()) > 0 || countPlays() !== pushedCount) dirty = true;
   publish();
 }
 

@@ -109,7 +109,27 @@ app.post('/api/import', async (c) => {
   return c.json({ accepted: enqueueImport(body.entries) });
 });
 
-app.get('/api/now', async (c) => c.json(await spotify.nowPlaying()));
+// When the current track changes (or playback stops), the previous one has just ended: pull it into the
+// history now instead of waiting for the next scheduled sync. Spotify can take a moment to list it, so
+// an empty first attempt is retried once.
+let lastNowId: string | null = null;
+let syncTimer: ReturnType<typeof setTimeout> | undefined;
+const pullSoon = (delay: number, retry: boolean) => {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    if ((await collect()) === 0 && retry) pullSoon(25_000, false);
+  }, delay);
+};
+
+app.get('/api/now', async (c) => {
+  const now = await spotify.nowPlaying();
+  const id = now?.track.id ?? null;
+  if (id !== lastNowId) {
+    lastNowId = id;
+    pullSoon(5_000, true);
+  }
+  return c.json(now);
+});
 
 app.get('/api/lyrics', async (c) => {
   const q = c.req.query();
