@@ -1,0 +1,16 @@
+[Unit]
+Description=Listening Log collector worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/spotify-calendar
+EnvironmentFile=/home/ubuntu/spotify-calendar/.env
+ExecStart=/home/ubuntu/.local/node/bin/node server/worker.ts
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
