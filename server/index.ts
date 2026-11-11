@@ -122,6 +122,8 @@ const pullSoon = (delay: number, retry: boolean) => {
 };
 
 app.get('/api/now', async (c) => {
+  // While Spotify is rate limiting us there is nothing to report and nothing to log on every poll.
+  if (spotify.rateLimitedFor() > 0) return c.json({ error: 'rate limited by Spotify', retryAfter: spotify.rateLimitedFor() }, 503);
   const now = await spotify.nowPlaying();
   const id = now?.track.id ?? null;
   if (id !== lastNowId) {

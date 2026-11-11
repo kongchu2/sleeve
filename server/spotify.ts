@@ -89,11 +89,24 @@ async function accessToken(force = false): Promise<string> {
   return (await tokenRequest({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token })).access_token;
 }
 
+// Spotify answers 429 with a Retry-After that can run to hours, and calling again meanwhile only risks a
+// longer ban. Once limited, every request is answered locally with the same 429 until that time has passed.
+let blockedUntil = 0;
+
+/** Seconds until Spotify accepts requests again; 0 when not rate limited. */
+export const rateLimitedFor = () => Math.max(0, Math.ceil((blockedUntil - Date.now()) / 1000));
+
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
+  if (rateLimitedFor() > 0) return new Response(null, { status: 429, headers: { 'retry-after': String(rateLimitedFor()) } });
   const call = async (token: string) =>
     fetch('https://api.spotify.com/v1' + path, { ...init, headers: { ...init.headers, Authorization: 'Bearer ' + token } });
   let res = await call(await accessToken());
   if (res.status === 401) res = await call(await accessToken(true));
+  if (res.status === 429) {
+    const wait = Number(res.headers.get('retry-after')) || 5;
+    blockedUntil = Date.now() + wait * 1000;
+    console.warn(`[spotify] rate limited: no requests for ${wait}s`);
+  }
   return res;
 }
 
@@ -159,6 +172,7 @@ async function apiPatient(path: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const res = await api(path);
     if (res.status !== 429 || attempt >= 8) return res;
+    if (Number(res.headers.get('retry-after')) > 120) return res; // a long ban: give up rather than sit in a loop
     const wait = Math.min(Number(res.headers.get('retry-after')) || 2, 120);
     await new Promise((r) => setTimeout(r, (wait + 1) * 1000));
   }
@@ -213,7 +227,30 @@ export async function backfillTrackMeta(): Promise<number> {
   return ids.length;
 }
 
-export async function nowPlaying(): Promise<{ isPlaying: boolean; progressMs: number; track: TrackInfo } | null> {
+type NowState = { isPlaying: boolean; progressMs: number; track: TrackInfo };
+
+// Every open page polls for the current track, so one answer from Spotify is shared between them for a few
+// seconds (longer while nothing is playing) instead of each poll becoming its own request.
+const NOW_TTL_PLAYING = 5_000;
+const NOW_TTL_IDLE = 12_000;
+let nowCache: { at: number; value: NowState | null } | null = null;
+let nowInflight: Promise<void> | null = null;
+
+/** What is playing, at most a few seconds old; the position is advanced to the present. */
+export async function nowPlaying(): Promise<NowState | null> {
+  const ttl = nowCache?.value?.isPlaying ? NOW_TTL_PLAYING : NOW_TTL_IDLE;
+  if (!nowCache || Date.now() - nowCache.at >= ttl) {
+    nowInflight ??= fetchNowPlaying()
+      .then((value) => { nowCache = { at: Date.now(), value }; })
+      .finally(() => { nowInflight = null; });
+    await nowInflight;
+  }
+  const { at, value } = nowCache!;
+  if (!value?.isPlaying) return value;
+  return { ...value, progressMs: Math.min(value.progressMs + (Date.now() - at), value.track.durationMs) };
+}
+
+async function fetchNowPlaying(): Promise<NowState | null> {
   const res = await api('/me/player/currently-playing');
   if (res.status === 204) return null;
   if (!res.ok) throw new Error(`currently-playing failed: ${res.status}`);
