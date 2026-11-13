@@ -67,6 +67,7 @@ Leave it running: plays are collected as tracks end while a page is open, and at
 ```sh
 npm install
 npm run dev               # http://127.0.0.1:5180, API on :8787
+npm test                  # node:test, against an in-memory database
 ```
 
 - `server/` — Hono API, Spotify client, collector, SQLite (`node:sqlite`).
