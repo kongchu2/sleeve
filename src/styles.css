@@ -5,14 +5,26 @@
   --line: #1f1f27;
   --surface: #15151a;
   --border: #2e2e38;
-  --display: 'Bricolage Grotesque', 'IBM Plex Sans', sans-serif;
+  --cjk: 'Noto Sans JP', 'Noto Sans KR', 'Noto Sans SC', 'Noto Sans TC';
   --mono: 'IBM Plex Mono', monospace;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   color-scheme: dark;
 }
 
+/* Titles and lyrics carry a lang attribute (see lang.ts). Chinese, Japanese and Korean draw the same Han
+   characters differently, so each language puts its own font first; untagged text is read as Japanese.
+   The font lists are rebuilt on every tagged element, because a variable keeps the value it had where it was set. */
+:lang(ko) { --cjk: 'Noto Sans KR', 'Noto Sans JP', 'Noto Sans SC', 'Noto Sans TC'; }
+:lang(zh) { --cjk: 'Noto Sans SC', 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR'; }
+:lang(zh-Hant) { --cjk: 'Noto Sans TC', 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR'; }
+:root, [lang] {
+  --sans: 'IBM Plex Sans', var(--cjk), system-ui, sans-serif;
+  --display: 'Bricolage Grotesque', 'IBM Plex Sans', var(--cjk), sans-serif;
+}
+:where([lang]) { font-family: var(--sans); }
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); }
 button { font: inherit; color: inherit; }
 a { color: inherit; }
 :focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
@@ -98,7 +110,6 @@ a { color: inherit; }
 .hours-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
 .albums { display: flex; flex-direction: column; }
-.full-tag { letter-spacing: 0.08em; transition: color 0.5s; }
 .tile { position: relative; }
 .album { border-top: 1px solid var(--line); }
 .album-row { width: 100%; display: flex; align-items: center; gap: 14px; padding: 10px 0; border: 0; background: none; text-align: left; cursor: pointer; }
@@ -117,7 +128,7 @@ a { color: inherit; }
 .track-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: var(--mono); font-size: 12px; }
 .silent { padding: 28px 0; border-top: 1px solid var(--line); font-size: 16px; line-height: 1.6; color: var(--muted); }
 
-/* ───── Secondary views (year, full albums, import) ───── */
+/* ───── Secondary views (year, import) ───── */
 .cal-links { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 6px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
 .cal-links a { display: inline-flex; align-items: center; min-height: 32px; color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
 .cal-links a:hover { color: #fff; border-bottom-color: currentColor; }
@@ -136,14 +147,6 @@ a { color: inherit; }
 .yd-filled:hover { outline-color: rgba(255, 255, 255, 0.6); }
 .yd img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
-.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: clamp(20px, 2.6vw, 36px) clamp(14px, 2vw, 28px); }
-.shelf-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-decoration: none; }
-.shelf-cover { display: block; aspect-ratio: 1 / 1; margin-bottom: 9px; border-radius: 8px; overflow: hidden; background: #1c1c23; outline: 2px solid transparent; outline-offset: 3px; transition: outline-color 0.25s; }
-.shelf-item:hover .shelf-cover { outline-color: rgba(255, 255, 255, 0.6); }
-.shelf-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.shelf-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.shelf-sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.shelf-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
 .import > * { max-width: 760px; }
 .import-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; font-size: 16px; line-height: 1.6; color: #d6d4dc; }
@@ -204,7 +207,7 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .np-veil { position: absolute; inset: 0; pointer-events: none; opacity: 0.38; background-color: var(--ground); transition: background-color 1.2s; }
 .np-wrap { position: relative; flex: 1; width: 100%; max-width: 1360px; margin: 0 auto; padding: var(--pad); display: flex; flex-direction: column; gap: var(--gap); }
 
-.np-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.np-header { height: 44px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .back { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: -11px; border-radius: 50%; color: #fff; opacity: 0.8; transition: opacity 0.2s, background-color 0.2s; }
 .back:hover { opacity: 1; background-color: rgba(255, 255, 255, 0.12); }
 
@@ -212,13 +215,13 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .fs-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; opacity: 0.8; cursor: pointer; transition: opacity 0.2s, background-color 0.2s; }
 .fs-btn:hover { opacity: 1; background-color: rgba(255, 255, 255, 0.12); }
 .fs-btn:disabled { opacity: 0.3; background: none; cursor: default; }
-.np-header { transition: opacity 0.6s; }
-/* Fullscreen: the header floats over the corner (it fades out anyway), freeing its row for a bigger cover. */
+.np-header { transition: opacity 0.6s, height 0.6s var(--ease), margin-bottom 0.6s var(--ease); }
 .np.is-fs { width: 100vw; height: 100vh; --pad: clamp(20px, 4vw, 72px); --cover-cap: 640px; --fit: min(calc(100vh - 2 * var(--pad) - 242px), 42vw); }
 /* The content column must not clip (a scroll container would cut the cover's glow off at its edges).
    Only on narrow screens, where the lyrics stack below and the column spans the full width, may it scroll. */
 .np.is-fs .np-wrap { max-width: 1760px; min-height: 0; }
 @media (max-width: 900px) { .np.is-fs .np-wrap { overflow-y: auto; scrollbar-width: none; } }
+/* Fullscreen: the header floats over the corner (it fades out anyway), freeing its row for a bigger cover. */
 .np.is-fs .np-header { position: absolute; top: var(--pad); left: var(--pad); right: var(--pad); z-index: 2; }
 /* The back arrow would sit on top of the cover here; leave fullscreen first to navigate. */
 .np.is-fs .back { visibility: hidden; }
@@ -227,15 +230,25 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .np.is-idle, .np.is-idle * { cursor: none; }
 /* Hidden chrome must not swallow the click that wakes it up. */
 .np.is-idle .np-header { opacity: 0; pointer-events: none; }
+/* In a window the header has its own row; while the pointer rests the row folds away and the cover and
+   lyrics grow into it. Not on narrow screens, where the page scrolls and the header simply stays. */
+@media (min-width: 901px) {
+  .np.is-idle:not(.is-fs) { --fit: calc(100vh - 2 * var(--pad) - 242px); }
+  .np.is-idle:not(.is-fs) .np-header { height: 0; margin-bottom: calc(-1 * var(--gap)); }
+}
+@media (max-width: 900px) { .np.is-idle:not(.is-fs) .np-header { opacity: 1; pointer-events: auto; } }
 .np-idle { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
 .np-idle h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(32px, 5vw, 60px); letter-spacing: -0.03em; }
 .np-idle p { margin: 0; font-size: 17px; color: var(--muted); }
 
 .np-main { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: clamp(32px, 6vw, 104px); }
-.np-left { flex: 0 1 var(--cover); min-width: 0; display: flex; flex-direction: column; gap: 24px; transition: flex-basis 0.3s var(--ease); }
-.cover { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; box-shadow: 0 60px 140px -30px color-mix(in srgb, var(--point) 70%, transparent), 0 24px 60px -20px rgba(0, 0, 0, 0.6); animation: fade-cover 0.8s both; }
+.np-left { flex: 0 1 var(--cover); min-width: 0; display: flex; flex-direction: column; gap: 24px; transition: flex-basis 0.6s var(--ease); }
+.cover { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6); animation: fade-cover 0.8s both; }
 .cover-blank { background: rgba(255, 255, 255, 0.08); }
-.cover-btn { display: block; width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; cursor: pointer; }
+.cover-btn { position: relative; isolation: isolate; display: block; width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; cursor: pointer; }
+/* The coloured glow around the cover. It is a layer of its own so that it can be faded out towards the
+   cover's bottom edge: the titles underneath stay on the plain background. */
+.cover-btn::before { content: ''; position: absolute; inset: -110px; z-index: -1; padding: 120px; border-radius: 130px; background-color: color-mix(in srgb, var(--point) 70%, transparent); background-clip: content-box; filter: blur(48px); -webkit-mask-image: linear-gradient(#000 calc(100% - 220px), transparent calc(100% - 118px)); mask-image: linear-gradient(#000 calc(100% - 220px), transparent calc(100% - 118px)); pointer-events: none; transition: background-color 1.2s; }
 .cover-btn.is-floating { animation: breathe 6s ease-in-out infinite; }
 .cover-btn.is-floating.is-paused { animation-play-state: paused; }
 .np-titles { display: flex; flex-direction: column; gap: 4px; font-size: 16px; }
@@ -245,7 +258,8 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .np-progress { display: flex; flex-direction: column; gap: 8px; }
 .bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
 .bar-fill { height: 4px; border-radius: 2px; background-color: var(--point); transition: width 0.2s linear, background-color 1.2s; }
-.np-times { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; }
+.np-fill { transform-origin: 0 50%; transition: background-color 1.2s; }
+.np-times { display: flex; justify-content: space-between; font-family: var(--sans); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; opacity: 0.7; }
 
 .np-right { flex: 1 1 420px; min-width: 0; font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.3vw, 48px); letter-spacing: -0.025em; }
 /* Side padding (cancelled by the negative margin) leaves room for the active line's glow inside the clip box. */
@@ -255,7 +269,7 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 .line.is-past { opacity: 0.2; }
 .line.is-active { opacity: 1; transform: none; text-shadow: 0 0 36px color-mix(in srgb, var(--point) 25%, transparent); }
 .line:hover { opacity: 1; filter: none !important; }
-.lyrics-plain { max-height: 70vh; overflow-y: auto; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.9; white-space: pre-line; opacity: 0.55; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.lyrics-plain { max-height: 70vh; overflow-y: auto; font-family: var(--sans); font-size: 17px; font-weight: 400; letter-spacing: 0; line-height: 1.9; white-space: pre-line; opacity: 0.55; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
 
 
 /* ───── Standby (fullscreen, nothing playing) ───── */

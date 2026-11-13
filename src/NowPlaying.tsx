@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { getLyrics, type Lyrics, type Now } from './api.ts';
 import { usePalette } from './color.ts';
+import { langOf } from './lang.ts';
 import { Standby } from './Standby.tsx';
 
 const FLOAT_KEY = 'cover-float';
@@ -18,20 +19,55 @@ const fmt = (ms: number) => {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 };
 
-/** Playback position, advanced locally between server polls. */
-function usePosition(now: Now | null): number {
+/** Playback position at this instant, advanced locally from the last server answer. */
+const positionOf = (now: Now) =>
+  Math.min(now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs, now.track.durationMs);
+
+// This screen is left on all day, so what moves with the clock is kept small: only the progress bar
+// re-renders on a timer, and the lyrics only when the line changes.
+
+/**
+ * The progress bar and its times, re-rendered five times a second while playing. The bar is scaled, not
+ * resized, so moving it needs no layout; it advances in those steps, each about a pixel.
+ */
+function Progress({ now }: { now: Now }) {
   const [, tick] = useState(0);
   useEffect(() => {
-    if (!now?.isPlaying) return;
+    if (!now.isPlaying) return;
     const id = setInterval(() => tick((n) => n + 1), 200);
     return () => clearInterval(id);
-  }, [now?.isPlaying]);
-  if (!now) return 0;
-  const pos = now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs;
-  return Math.min(pos, now.track.durationMs);
+  }, [now.isPlaying]);
+  const pos = positionOf(now);
+  const { durationMs } = now.track;
+  return (
+    <div className="np-progress">
+      <div className="bar" role="progressbar" aria-label="Playback position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((pos / durationMs) * 100)}>
+        <div className="bar-fill np-fill" style={{ transform: `scaleX(${pos / durationMs})` }} />
+      </div>
+      <div className="np-times"><span>{fmt(pos)}</span><span>{fmt(durationMs)}</span></div>
+    </div>
+  );
 }
 
-/** Fullscreen state for an element, plus an "idle" flag that hides chrome when the pointer rests. */
+/** Index of the lyric line being sung (-1 before the first), woken exactly when the next line starts. */
+function useActiveLine(lines: { t: number }[], now: Now): number {
+  const [active, setActive] = useState(() => lines.findLastIndex((l) => l.t <= positionOf(now)));
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const step = () => {
+      const pos = positionOf(now);
+      const i = lines.findLastIndex((l) => l.t <= pos);
+      setActive(i);
+      const next = lines[i + 1];
+      if (now.isPlaying && next) timer = setTimeout(step, Math.max(20, next.t - pos));
+    };
+    step();
+    return () => clearTimeout(timer);
+  }, [lines, now]);
+  return active;
+}
+
+/** Fullscreen state for an element, plus an "idle" flag that hides chrome when the pointer rests (fullscreen or not). */
 function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
   const [active, setActive] = useState(false);
   const [idle, setIdle] = useState(false);
@@ -43,7 +79,6 @@ function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
   }, [ref]);
 
   useEffect(() => {
-    if (!active) { setIdle(false); return; }
     let timer: ReturnType<typeof setTimeout>;
     const wake = () => {
       setIdle(false);
@@ -60,7 +95,7 @@ function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
       removeEventListener('pointerdown', wake);
       removeEventListener('keydown', wake);
     };
-  }, [active]);
+  }, []);
 
   const toggle = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -73,8 +108,10 @@ function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
 export function NowPlaying({ now }: { now: Now | null }) {
   const track = now?.track ?? null;
   const palette = usePalette(track?.imageS);
-  const pos = usePosition(now);
   const [lyrics, setLyrics] = useState<Lyrics | 'loading' | null>(null);
+  // The lyrics say more about the language than a short title does, so they are read along with it.
+  const words = lyrics && lyrics !== 'loading' ? (lyrics.plain ?? lyrics.synced?.map((l) => l.text).join(' ')) : null;
+  const lang = track ? langOf(track.name, track.artists, track.album, words) : undefined;
   // The cover floats by default; clicking it turns that off (remembered in this browser).
   const [floating, setFloating] = useState(() => {
     try { return localStorage.getItem(FLOAT_KEY) !== 'off'; } catch { return true; }
@@ -188,20 +225,15 @@ export function NowPlaying({ now }: { now: Now | null }) {
                   )}
                 </button>
                 <div className="np-titles">
-                  <h1>{track.name}</h1>
-                  <div className="np-artist">{track.artists}</div>
-                  <div className="np-album">{track.album}</div>
+                  <h1 lang={lang}>{track.name}</h1>
+                  <div className="np-artist" lang={lang}>{track.artists}</div>
+                  <div className="np-album" lang={lang}>{track.album}</div>
                 </div>
-                <div className="np-progress">
-                  <div className="bar" role="progressbar" aria-label="Playback position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((pos / track.durationMs) * 100)}>
-                    <div className="bar-fill" style={{ width: (pos / track.durationMs) * 100 + '%' }} />
-                  </div>
-                  <div className="np-times"><span>{fmt(pos)}</span><span>{fmt(track.durationMs)}</span></div>
-                </div>
+                <Progress now={now} />
               </section>
 
-              <section className="np-right" aria-label="Lyrics">
-                <LyricsView lyrics={lyrics} pos={pos} />
+              <section className="np-right" aria-label="Lyrics" lang={lang}>
+                <LyricsView lyrics={lyrics} now={now} />
               </section>
             </main>
         )}
@@ -210,16 +242,20 @@ export function NowPlaying({ now }: { now: Now | null }) {
   );
 }
 
-function LyricsView({ lyrics, pos }: { lyrics: Lyrics | 'loading' | null; pos: number }) {
+function LyricsView({ lyrics, now }: { lyrics: Lyrics | 'loading' | null; now: Now }) {
   // No lyrics, an instrumental, or still loading: leave the space empty.
   if (!lyrics || lyrics === 'loading' || lyrics.instrumental) return null;
-  if (lyrics.synced) return <SyncedLyrics lines={lyrics.synced} pos={pos} />;
+  if (lyrics.synced) return <SyncedLyrics lines={lyrics.synced} now={now} />;
   if (lyrics.plain) return <div className="lyrics-plain">{lyrics.plain}</div>;
   return null;
 }
 
-function SyncedLyrics({ lines, pos }: { lines: { t: number; text: string }[]; pos: number }) {
-  const active = lines.findLastIndex((l) => l.t <= pos);
+/** Lines kept painted around the active one: what the lyrics box can show, plus one that is scrolling out or in. */
+const LINES_ABOVE = 3;
+const LINES_BELOW = 9;
+
+function SyncedLyrics({ lines, now }: { lines: { t: number; text: string }[]; now: Now }) {
+  const active = useActiveLine(lines, now);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const innerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
@@ -237,17 +273,26 @@ function SyncedLyrics({ lines, pos }: { lines: { t: number; text: string }[]; po
   return (
     <div className="lyrics">
       <div className="lyrics-inner" ref={innerRef} style={{ transform: `translateY(${-offset}px)` }}>
-        {lines.map((l, i) => (
-          <div
-            key={i}
-            ref={(el) => { refs.current[i] = el; }}
-            className={'line' + (i === active ? ' is-active' : i < active ? ' is-past' : '')}
-            aria-current={i === active ? 'true' : undefined}
-            style={{ filter: i === active ? undefined : `blur(${Math.min(Math.abs(i - Math.max(0, active)) * 0.7, 3.5)}px)` }}
-          >
-            {l.text}
-          </div>
-        ))}
+        {lines.map((l, i) => {
+          const away = i - Math.max(0, active);
+          // The box shows about two lines above the active one and seven below; the rest keep their place
+          // in the layout but are not painted (each would be a blurred layer of its own).
+          const style: CSSProperties =
+            away < -LINES_ABOVE || away > LINES_BELOW ? { visibility: 'hidden' }
+            : i === active ? {}
+            : { filter: `blur(${Math.min(Math.abs(away) * 0.7, 3.5)}px)` };
+          return (
+            <div
+              key={i}
+              ref={(el) => { refs.current[i] = el; }}
+              className={'line' + (i === active ? ' is-active' : i < active ? ' is-past' : '')}
+              aria-current={i === active ? 'true' : undefined}
+              style={style}
+            >
+              {l.text}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

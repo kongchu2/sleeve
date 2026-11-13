@@ -6,10 +6,9 @@ Your Spotify listening history as a calendar of album covers, plus a Now Playing
 
 ![Standby: a clock over a wall of your most played album covers](docs/standby.jpg)
 
-- **Calendar** — every day is a tile made of the albums you played. Pick a day to see its albums, tracks and when you listened. Albums you played start to finish get a disc badge.
+- **Calendar** — every day is a tile made of the albums you played. Pick a day to see its albums, tracks and when you listened.
 - **Year** — twelve small months on one page, each day showing its most played album.
-- **Full albums** — a shelf of every album you played start to finish.
-- **Recap** — one sheet per month: most played album, listening time, full albums, busiest hour.
+- **Recap** — one sheet per month: most played album, listening time, busiest hour.
 - **Little extras** — a colour strip showing how the month moved, "3 days in a row" and "a year ago today" notes on each day.
 - **Now Playing** — the cover's dominant colour drives the whole screen; lyrics follow the song. Press `F` for fullscreen.
 - **Standby** — left in fullscreen with nothing playing, it becomes a clock over a wall of your most played album covers.
@@ -19,7 +18,7 @@ Your Spotify listening history as a calendar of album covers, plus a Now Playing
 
 Spotify only exposes your last 50 plays, so history builds up **from the moment you start running this**, and only while it is running.
 
-To fill in the past, request your **Extended streaming history** at <https://www.spotify.com/account/privacy/> and load the `Streaming_History_Audio_*.json` files on the app's **Import history** page. Each track is looked up on Spotify for its artwork, so a large history takes a while (it runs in the background and never adds a play twice).
+To fill in the past, request your **Extended streaming history** at <https://www.spotify.com/account/privacy/> and load the `Streaming_History_Audio_*.json` files on the app's **Import history** page. Plays are added right away (never twice); their artwork is then looked up in the background, which takes some hours for a large history.
 
 ## What you need
 
@@ -61,7 +60,7 @@ npm start
 
 Open <http://127.0.0.1:8787>. The database is `data/listening.db`.
 
-Leave it running: plays are collected every 2 minutes.
+Leave it running: plays are collected as tracks end while a page is open, and at least every 15 minutes otherwise.
 
 ## Development
 
