@@ -222,3 +222,20 @@ test('currentNow waits a moment for the poller to take its first look', async ()
   await settle();
   assert.equal((await answer)?.progressMs, 10_000);
 });
+
+test('a podcast episode is shown as now playing but never written to the history', async () => {
+  const episode = {
+    id: 'e'.repeat(22), type: 'episode', name: 'Episode 1', duration_ms: 3_600_000, images: [],
+    show: { name: 'Show', publisher: 'Publisher', images: [{ url: 'show.jpg', width: 640 }] },
+  };
+  player = { is_playing: true, progress_ms: 60_000, item: episode as never };
+  startPoller();
+  await advance(30_000, 'now');
+  const now = await currentNow();
+  assert.equal(now?.track.kind, 'episode');
+  assert.equal(now?.track.artists, 'Show');
+  assert.equal(now?.track.imageL, 'show.jpg');
+  player = { is_playing: true, progress_ms: 0, item: track('b') };
+  await advance(60_000, 'now'); // the change of item pulls the history
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM plays').get() as { n: number }).n, 0);
+});

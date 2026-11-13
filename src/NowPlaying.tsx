@@ -49,13 +49,19 @@ function Progress({ now }: { now: Now }) {
   );
 }
 
+/**
+ * A line is lit this early, so that its 0.6–0.7s transition (see .line in styles.css) is mostly done
+ * when it is sung, instead of only starting then.
+ */
+const LYRIC_LEAD_MS = 100;
+
 /** Index of the lyric line being sung (-1 before the first), woken exactly when the next line starts. */
 function useActiveLine(lines: { t: number }[], now: Now): number {
-  const [active, setActive] = useState(() => lines.findLastIndex((l) => l.t <= positionOf(now)));
+  const [active, setActive] = useState(() => lines.findLastIndex((l) => l.t <= positionOf(now) + LYRIC_LEAD_MS));
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const step = () => {
-      const pos = positionOf(now);
+      const pos = positionOf(now) + LYRIC_LEAD_MS;
       const i = lines.findLastIndex((l) => l.t <= pos);
       setActive(i);
       const next = lines[i + 1];
@@ -219,7 +225,7 @@ export function NowPlaying({ now }: { now: Now | null }) {
                   onClick={toggleFloating}
                 >
                   {track.imageL ? (
-                    <img className="cover" src={track.imageL} alt={`${track.album} album cover`} key={track.imageL} />
+                    <img className="cover" src={track.imageL} alt={track.kind === 'episode' ? `${track.artists} podcast cover` : `${track.album} album cover`} key={track.imageL} />
                   ) : (
                     <div className="cover cover-blank" role="img" aria-label="No album cover" />
                   )}

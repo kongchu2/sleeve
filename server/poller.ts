@@ -93,8 +93,15 @@ export function startPoller(): void {
       watched = watching;
 
       if (watching && Date.now() >= nextNow) {
-        const value = await spotify.fetchNowPlaying();
+        const sent = Date.now();
+        const answer = await spotify.fetchNowPlaying();
         const at = Date.now();
+        // Spotify measured the position somewhere between sending and receiving: count from the midpoint.
+        // Capped, since a slow answer (a token refresh, a stall) says little about when it was measured.
+        const value =
+          answer?.isPlaying
+            ? { ...answer, progressMs: Math.min(answer.progressMs + Math.min((at - sent) / 2, 1_000), answer.track.durationMs) }
+            : answer;
         kvSet('now', { at, value } satisfies Snapshot);
         const id = value?.track.id ?? null;
         if (lastTrack !== undefined && id !== lastTrack) {

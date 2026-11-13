@@ -11,6 +11,8 @@ export type Play = {
 };
 
 export type Track = {
+  /** Podcast episodes appear only as now playing, never in the history. */
+  kind: 'track' | 'episode';
   id: string;
   name: string;
   artists: string;
@@ -90,12 +92,17 @@ export const getPlays = (from: number, to: number) => get<Play[]>(`/api/plays?fr
 
 /** `nowView`: the caller is the Now Playing view, which the server keeps more up to date. */
 export async function getNow(nowView: boolean): Promise<Now | null> {
+  const sent = Date.now();
   const now = await get<Omit<Now, 'receivedAt'> | null>('/api/now' + (nowView ? '?view=now' : ''));
-  return now ? { ...now, receivedAt: Date.now() } : null;
+  const receivedAt = Date.now();
+  if (!now) return null;
+  // The server advanced the position to when it answered, about half the round trip ago.
+  const lag = now.isPlaying ? Math.min((receivedAt - sent) / 2, 1_000) : 0;
+  return { ...now, progressMs: Math.min(now.progressMs + lag, now.track.durationMs), receivedAt };
 }
 
 export const getLyrics = (t: Track) =>
   get<Lyrics>(
     '/api/lyrics?' +
-      new URLSearchParams({ id: t.id, name: t.name, artists: t.artists, album: t.album, duration: String(t.durationMs) }),
+      new URLSearchParams({ id: t.id, name: t.name, artists: t.artists, album: t.album, duration: String(t.durationMs), kind: t.kind }),
   );
