@@ -104,7 +104,13 @@ export async function getLyrics(
   artists: string,
   album: string,
   durationMs: number,
+  /** False for podcast episodes: they are shown, never stored. */
+  store = true,
 ): Promise<Lyrics> {
+  if (!store) {
+    const spotify = await spotifyLyrics(trackId);
+    return spotify && (spotify.synced || spotify.plain) ? spotify : fetchLyrics(name, artists.split(', ')[0], album, durationMs);
+  }
   const row = db.prepare('SELECT body, fetched_at FROM lyrics WHERE track_id = ?').get(trackId) as
     | { body: string; fetched_at: number }
     | undefined;

@@ -24,7 +24,19 @@ export type SpotifyTrack = {
   album: { id: string | null; name: string; images: SpotifyImage[]; total_tracks?: number };
 };
 
+/** A podcast episode, as currently-playing returns it with `additional_types=episode`. */
+type SpotifyEpisode = {
+  id: string | null;
+  type: 'episode';
+  name: string;
+  duration_ms: number;
+  images?: SpotifyImage[];
+  show: { name: string; publisher?: string; images?: SpotifyImage[] };
+};
+
 export type TrackInfo = {
+  /** Episodes are only ever shown as now playing; they are never written to the history. */
+  kind: 'track' | 'episode';
   id: string;
   name: string;
   artists: string;
@@ -122,12 +134,26 @@ function pickImages(images: SpotifyImage[]) {
 export function toTrackInfo(t: SpotifyTrack): TrackInfo | null {
   if (!t.id) return null; // local files have no id
   return {
+    kind: 'track',
     id: t.id,
     name: t.name,
     artists: t.artists.map((a) => a.name).join(', '),
     album: t.album.name,
     durationMs: t.duration_ms,
     ...pickImages(t.album.images),
+  };
+}
+
+function episodeInfo(e: SpotifyEpisode): TrackInfo | null {
+  if (!e.id) return null;
+  return {
+    kind: 'episode',
+    id: e.id,
+    name: e.name,
+    artists: e.show.name,
+    album: e.show.publisher ?? '',
+    durationMs: e.duration_ms,
+    ...pickImages(e.images?.length ? e.images : (e.show.images ?? [])),
   };
 }
 
@@ -170,12 +196,20 @@ export type NowState = { isPlaying: boolean; progressMs: number; track: TrackInf
 
 /** What is playing right now. One request; callers go through server/poller.ts, which paces them. */
 export async function fetchNowPlaying(): Promise<NowState | null> {
-  const res = await api('/me/player/currently-playing');
+  const res = await api('/me/player/currently-playing?additional_types=episode');
   if (res.status === 204) return null;
   if (!res.ok) throw new Error(`currently-playing failed: ${res.status}`);
-  const json = (await res.json()) as { is_playing: boolean; progress_ms: number | null; item: SpotifyTrack | null };
-  if (!json.item || (json.item.type && json.item.type !== 'track')) return null;
-  const track = toTrackInfo(json.item);
+  const json = (await res.json()) as {
+    is_playing: boolean;
+    progress_ms: number | null;
+    item: SpotifyTrack | SpotifyEpisode | null;
+  };
+  const item = json.item;
+  if (!item) return null;
+  const track =
+    item.type === 'episode' ? episodeInfo(item as SpotifyEpisode)
+    : !item.type || item.type === 'track' ? toTrackInfo(item as SpotifyTrack)
+    : null;
   if (!track) return null;
   return { isPlaying: json.is_playing, progressMs: json.progress_ms ?? 0, track };
 }

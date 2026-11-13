@@ -129,7 +129,7 @@ app.get('/api/now', async (c) => {
 app.get('/api/lyrics', async (c) => {
   const q = c.req.query();
   if (!q.id || !q.name || !q.artists) return c.json({ error: 'id/name/artists required' }, 400);
-  return c.json(await getLyrics(q.id, q.name, q.artists, q.album ?? '', Number(q.duration) || 0));
+  return c.json(await getLyrics(q.id, q.name, q.artists, q.album ?? '', Number(q.duration) || 0, q.kind !== 'episode'));
 });
 
 if (existsSync('dist/index.html')) {
