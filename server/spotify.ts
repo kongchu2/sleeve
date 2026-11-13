@@ -91,10 +91,9 @@ async function accessToken(force = false): Promise<string> {
 
 // Spotify answers 429 with a Retry-After that can run to hours, and calling again meanwhile only risks a
 // longer ban. Once limited, every request is answered locally with the same 429 until that time has passed.
-let blockedUntil = 0;
-
+// The deadline lives in the database so that it survives a restart and the web server can report it.
 /** Seconds until Spotify accepts requests again; 0 when not rate limited. */
-export const rateLimitedFor = () => Math.max(0, Math.ceil((blockedUntil - Date.now()) / 1000));
+export const rateLimitedFor = () => Math.max(0, Math.ceil(((kvGet<number>('blockedUntil') ?? 0) - Date.now()) / 1000));
 
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
   if (rateLimitedFor() > 0) return new Response(null, { status: 429, headers: { 'retry-after': String(rateLimitedFor()) } });
@@ -104,7 +103,7 @@ async function api(path: string, init: RequestInit = {}): Promise<Response> {
   if (res.status === 401) res = await call(await accessToken(true));
   if (res.status === 429) {
     const wait = Number(res.headers.get('retry-after')) || 5;
-    blockedUntil = Date.now() + wait * 1000;
+    kvSet('blockedUntil', Date.now() + wait * 1000);
     console.warn(`[spotify] rate limited: no requests for ${wait}s`);
   }
   return res;
@@ -167,90 +166,10 @@ export async function syncRecent(): Promise<number> {
   return added;
 }
 
-/** Like `api`, but waits out rate limiting (429 + Retry-After) instead of failing. */
-async function apiPatient(path: string): Promise<Response> {
-  for (let attempt = 0; ; attempt++) {
-    const res = await api(path);
-    if (res.status !== 429 || attempt >= 8) return res;
-    if (Number(res.headers.get('retry-after')) > 120) return res; // a long ban: give up rather than sit in a loop
-    const wait = Math.min(Number(res.headers.get('retry-after')) || 2, 120);
-    await new Promise((r) => setTimeout(r, (wait + 1) * 1000));
-  }
-}
+export type NowState = { isPlaying: boolean; progressMs: number; track: TrackInfo };
 
-// The batch endpoint is not available to every app; remembered after the first refusal.
-let batchTracksSupported = true;
-
-/**
- * Look up tracks by id. Unknown or removed tracks map to null.
- * `onProgress` is called with the number of ids resolved so far.
- */
-export async function fetchTracks(ids: string[], onProgress?: (done: number) => void): Promise<Map<string, SpotifyTrack | null>> {
-  const out = new Map<string, SpotifyTrack | null>();
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50);
-    if (batchTracksSupported) {
-      const batch = await apiPatient('/tracks?ids=' + chunk.join(','));
-      if (batch.ok) {
-        const { tracks } = (await batch.json()) as { tracks: (SpotifyTrack | null)[] };
-        chunk.forEach((id, k) => out.set(id, tracks[k] ?? null));
-        onProgress?.(out.size);
-        continue;
-      }
-      if (batch.status === 401 || batch.status >= 500) throw new Error(`track lookup failed: ${batch.status}`);
-      batchTracksSupported = false;
-    }
-    for (const id of chunk) {
-      const one = await apiPatient('/tracks/' + id);
-      if (one.ok) out.set(id, (await one.json()) as SpotifyTrack);
-      else if (one.status === 404 || one.status === 400) out.set(id, null);
-      else throw new Error(`track lookup failed: ${one.status}`);
-      onProgress?.(out.size);
-    }
-  }
-  return out;
-}
-
-/**
- * Fill in track number / album size for plays stored before those columns existed.
- * Tracks Spotify no longer knows are marked with 0 so they are not retried forever.
- */
-export async function backfillTrackMeta(): Promise<number> {
-  const ids = (db.prepare('SELECT DISTINCT track_id FROM plays WHERE album_total_tracks IS NULL').all() as { track_id: string }[]).map(
-    (r) => r.track_id,
-  );
-  if (!ids.length) return 0;
-  const update = db.prepare('UPDATE plays SET track_number = ?, disc_number = ?, album_total_tracks = ? WHERE track_id = ?');
-  for (const [id, t] of await fetchTracks(ids)) {
-    update.run(t?.track_number ?? 0, t?.disc_number ?? 0, t?.album.total_tracks ?? 0, id);
-  }
-  return ids.length;
-}
-
-type NowState = { isPlaying: boolean; progressMs: number; track: TrackInfo };
-
-// Every open page polls for the current track, so one answer from Spotify is shared between them for a few
-// seconds (longer while nothing is playing) instead of each poll becoming its own request.
-const NOW_TTL_PLAYING = 5_000;
-const NOW_TTL_IDLE = 12_000;
-let nowCache: { at: number; value: NowState | null } | null = null;
-let nowInflight: Promise<void> | null = null;
-
-/** What is playing, at most a few seconds old; the position is advanced to the present. */
-export async function nowPlaying(): Promise<NowState | null> {
-  const ttl = nowCache?.value?.isPlaying ? NOW_TTL_PLAYING : NOW_TTL_IDLE;
-  if (!nowCache || Date.now() - nowCache.at >= ttl) {
-    nowInflight ??= fetchNowPlaying()
-      .then((value) => { nowCache = { at: Date.now(), value }; })
-      .finally(() => { nowInflight = null; });
-    await nowInflight;
-  }
-  const { at, value } = nowCache!;
-  if (!value?.isPlaying) return value;
-  return { ...value, progressMs: Math.min(value.progressMs + (Date.now() - at), value.track.durationMs) };
-}
-
-async function fetchNowPlaying(): Promise<NowState | null> {
+/** What is playing right now. One request; callers go through server/poller.ts, which paces them. */
+export async function fetchNowPlaying(): Promise<NowState | null> {
   const res = await api('/me/player/currently-playing');
   if (res.status === 204) return null;
   if (!res.ok) throw new Error(`currently-playing failed: ${res.status}`);

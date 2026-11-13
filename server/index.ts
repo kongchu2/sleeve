@@ -1,21 +1,24 @@
 import { existsSync } from 'node:fs';
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { collect } from './collector.ts';
 import { db } from './db.ts';
-import { enqueueImport, importStatus } from './importer.ts';
+import { coverImported, coverlessTracks, importEntries, settleImported } from './importer.ts';
 import { getLyrics } from './lyrics.ts';
+import { currentNow, noteViewer, startPoller } from './poller.ts';
 import * as spotify from './spotify.ts';
-import { dayNotes, fullAlbums, recap, wallCovers } from './stats.ts';
+import { dayNotes, recap, wallCovers } from './stats.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 // Loopback by default: the API exposes your history and can sign you out, so only widen this behind something that restricts access.
 const HOST = process.env.HOST ?? '127.0.0.1';
 const APP_URL = process.env.APP_URL ?? '/';
-const SYNC_INTERVAL = 2 * 60 * 1000;
 
 const app = new Hono();
+
+// A month of plays is over a megabyte of very repetitive JSON.
+app.use(compress());
 
 app.onError((err, c) => {
   console.error(err);
@@ -32,7 +35,6 @@ app.get('/auth/callback', async (c) => {
   const state = c.req.query('state');
   if (!code || !state) return c.text('Spotify authorization was cancelled: ' + (c.req.query('error') ?? 'unknown'), 400);
   await spotify.exchangeCode(code, state);
-  await collect();
   return c.redirect(APP_URL);
 });
 
@@ -52,7 +54,12 @@ app.get('/api/plays', (c) => {
   const from = Number(c.req.query('from'));
   const to = Number(c.req.query('to'));
   if (!Number.isFinite(from) || !Number.isFinite(to)) return c.json({ error: 'from/to required' }, 400);
-  const rows = db.prepare('SELECT * FROM plays WHERE played_at >= ? AND played_at < ? ORDER BY played_at').all(from, to);
+  const rows = db
+    .prepare(
+      `SELECT played_at, track_id, track_name, artists, album_id, album_name, image_m, image_s, duration_ms
+       FROM plays WHERE played_at >= ? AND played_at < ? ORDER BY played_at`,
+    )
+    .all(from, to);
   return c.json(rows);
 });
 
@@ -81,7 +88,6 @@ app.get('/api/days', (c) => {
   return c.json(days);
 });
 
-app.get('/api/full-albums', (c) => c.json(fullAlbums()));
 
 app.get('/api/day-notes', (c) => {
   const day = c.req.query('day') ?? '';
@@ -101,35 +107,22 @@ app.get('/api/recap', (c) => {
   return c.json(recap(from, to, Number(c.req.query('tz')) || 0));
 });
 
-app.get('/api/import', (c) => c.json(importStatus()));
+app.get('/api/import', (c) => c.json({ coverlessTracks: coverlessTracks() }));
 
 app.post('/api/import', async (c) => {
   const body = (await c.req.json().catch(() => null)) as { entries?: unknown[] } | null;
   if (!body || !Array.isArray(body.entries)) return c.json({ error: 'entries required' }, 400);
-  return c.json({ accepted: enqueueImport(body.entries) });
+  return c.json(importEntries(body.entries));
 });
 
-// When the current track changes (or playback stops), the previous one has just ended: pull it into the
-// history now instead of waiting for the next scheduled sync. Spotify can take a moment to list it, so
-// an empty first attempt is retried once.
-let lastNowId: string | null = null;
-let syncTimer: ReturnType<typeof setTimeout> | undefined;
-const pullSoon = (delay: number, retry: boolean) => {
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(async () => {
-    if ((await collect()) === 0 && retry) pullSoon(25_000, false);
-  }, delay);
-};
-
+// The web server never calls Spotify here: server/poller.ts does, at its own pace, and this reads what it
+// last saw. `view=now` says the caller is on the Now Playing view, which is kept more up to date.
 app.get('/api/now', async (c) => {
-  // While Spotify is rate limiting us there is nothing to report and nothing to log on every poll.
+  noteViewer(c.req.query('view') === 'now');
   if (spotify.rateLimitedFor() > 0) return c.json({ error: 'rate limited by Spotify', retryAfter: spotify.rateLimitedFor() }, 503);
-  const now = await spotify.nowPlaying();
-  const id = now?.track.id ?? null;
-  if (id !== lastNowId) {
-    lastNowId = id;
-    pullSoon(5_000, true);
-  }
+  const now = await currentNow();
+  // Unknown is an error, so the page keeps showing what it last knew instead of "nothing playing".
+  if (now === undefined) return c.json({ error: 'now playing is not being updated' }, 503);
   return c.json(now);
 });
 
@@ -154,7 +147,8 @@ serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   if (!spotify.isConfigured()) console.log('Spotify credentials missing: copy .env.example to .env and fill it in.');
   // COLLECT=0 leaves collection to the separate worker (server/worker.ts).
   if (process.env.COLLECT !== '0') {
-    void collect();
-    setInterval(collect, SYNC_INTERVAL);
+    startPoller();
+    settleImported();
+    void coverImported();
   }
 });
