@@ -118,9 +118,13 @@ app.post('/api/import', async (c) => {
 // The web server never calls Spotify here: server/poller.ts does, at its own pace, and this reads what it
 // last saw. `view=now` says the caller is on the Now Playing view, which is kept more up to date.
 app.get('/api/now', async (c) => {
+  const started = Date.now();
   noteViewer(c.req.query('view') === 'now');
   if (spotify.rateLimitedFor() > 0) return c.json({ error: 'rate limited by Spotify', retryAfter: spotify.rateLimitedFor() }, 503);
   const now = await currentNow();
+  // currentNow can wait for the poller's first look. The position is as of this answer, so the page must
+  // not count that wait as time in transit (see getNow in src/api.ts).
+  c.header('Server-Timing', `now;dur=${Date.now() - started}`);
   // Unknown is an error, so the page keeps showing what it last knew instead of "nothing playing".
   if (now === undefined) return c.json({ error: 'now playing is not being updated' }, 503);
   return c.json(now);

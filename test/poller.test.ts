@@ -17,7 +17,11 @@ const track = (c: string, durationMs = 300_000) => ({
   id: c.repeat(22), type: 'track', name: 'Song ' + c, duration_ms: durationMs,
   artists: [{ name: 'Artist' }], album: { id: 'album-' + c, name: 'Album', images: [] },
 });
-type Player = { is_playing: boolean; progress_ms: number; item: ReturnType<typeof track> } | null;
+const episode = (c: string, durationMs = 3_600_000) => ({
+  id: c.repeat(22), type: 'episode', name: 'Episode ' + c, duration_ms: durationMs, images: [],
+  show: { name: 'Show', publisher: 'Publisher', images: [{ url: 'show.jpg', width: 640 }] },
+});
+type Player = { is_playing: boolean; progress_ms: number; item: ReturnType<typeof track> | ReturnType<typeof episode> } | null;
 
 let player: Player;
 let recent: { played_at: string; track: ReturnType<typeof track> }[];
@@ -223,19 +227,35 @@ test('currentNow waits a moment for the poller to take its first look', async ()
   assert.equal((await answer)?.progressMs, 10_000);
 });
 
-test('a podcast episode is shown as now playing but never written to the history', async () => {
-  const episode = {
-    id: 'e'.repeat(22), type: 'episode', name: 'Episode 1', duration_ms: 3_600_000, images: [],
-    show: { name: 'Show', publisher: 'Publisher', images: [{ url: 'show.jpg', width: 640 }] },
-  };
-  player = { is_playing: true, progress_ms: 60_000, item: episode as never };
+test('a podcast episode is shown as now playing: show as the artist, publisher as the album', async () => {
+  player = { is_playing: true, progress_ms: 60_000, item: episode('e') };
   startPoller();
-  await advance(30_000, 'now');
-  const now = await currentNow();
-  assert.equal(now?.track.kind, 'episode');
-  assert.equal(now?.track.artists, 'Show');
-  assert.equal(now?.track.imageL, 'show.jpg');
-  player = { is_playing: true, progress_ms: 0, item: track('b') };
-  await advance(60_000, 'now'); // the change of item pulls the history
-  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM plays').get() as { n: number }).n, 0);
+  await advance(1_000, 'now');
+  const t = (await currentNow())?.track;
+  assert.deepEqual(
+    [t?.kind, t?.name, t?.artists, t?.album, t?.imageL],
+    ['episode', 'Episode e', 'Show', 'Publisher', 'show.jpg'],
+  );
+});
+
+test('the end of an episode pulls no history: recently-played never lists episodes', async () => {
+  player = { is_playing: true, progress_ms: 3_597_000, item: episode('e') };
+  startPoller();
+  await advance(1_000, 'now');
+  player = { is_playing: true, progress_ms: 500, item: track('b') };
+  await advance(120_000, 'now');
+  assert.ok(times(NOW_PATH).includes(5), 'the change of item was seen');
+  assert.deepEqual(times(RECENT_PATH), [1]);
+});
+
+test('a track giving way to an episode still pulls the history, and only the track is stored', async () => {
+  player = { is_playing: true, progress_ms: 297_000, item: track('a') };
+  startPoller();
+  await advance(1_000, 'now');
+  player = { is_playing: true, progress_ms: 0, item: episode('e') };
+  recent = [{ played_at: new Date(epoch + 4_000).toISOString(), track: track('a') }];
+  await advance(120_000, 'now');
+  assert.deepEqual(times(RECENT_PATH), [1, 10]);
+  const ids = (db.prepare('SELECT track_id FROM plays').all() as { track_id: string }[]).map((p) => p.track_id);
+  assert.deepEqual(ids, ['a'.repeat(22)]);
 });
