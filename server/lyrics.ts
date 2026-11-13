@@ -107,17 +107,15 @@ export async function getLyrics(
   /** False for podcast episodes: they are shown, never stored. */
   store = true,
 ): Promise<Lyrics> {
-  if (!store) {
-    const spotify = await spotifyLyrics(trackId);
-    return spotify && (spotify.synced || spotify.plain) ? spotify : fetchLyrics(name, artists.split(', ')[0], album, durationMs);
-  }
-  const row = db.prepare('SELECT body, fetched_at FROM lyrics WHERE track_id = ?').get(trackId) as
-    | { body: string; fetched_at: number }
-    | undefined;
-  if (row) {
-    const cached = JSON.parse(row.body) as Lyrics;
-    const found = cached.synced || cached.plain || cached.instrumental;
-    if (found || Date.now() - row.fetched_at < MISS_TTL) return cached;
+  if (store) {
+    const row = db.prepare('SELECT body, fetched_at FROM lyrics WHERE track_id = ?').get(trackId) as
+      | { body: string; fetched_at: number }
+      | undefined;
+    if (row) {
+      const cached = JSON.parse(row.body) as Lyrics;
+      const found = cached.synced || cached.plain || cached.instrumental;
+      if (found || Date.now() - row.fetched_at < MISS_TTL) return cached;
+    }
   }
   // Spotify's own lyrics first (usually line-synced), then LRCLIB.
   const spotify = await spotifyLyrics(trackId);
@@ -125,8 +123,10 @@ export async function getLyrics(
     spotify && (spotify.synced || spotify.plain)
       ? spotify
       : await fetchLyrics(name, artists.split(', ')[0], album, durationMs);
-  db.prepare(
-    'INSERT INTO lyrics (track_id, body, fetched_at) VALUES (?, ?, ?) ON CONFLICT(track_id) DO UPDATE SET body = excluded.body, fetched_at = excluded.fetched_at',
-  ).run(trackId, JSON.stringify(lyrics), Date.now());
+  if (store) {
+    db.prepare(
+      'INSERT INTO lyrics (track_id, body, fetched_at) VALUES (?, ?, ?) ON CONFLICT(track_id) DO UPDATE SET body = excluded.body, fetched_at = excluded.fetched_at',
+    ).run(trackId, JSON.stringify(lyrics), Date.now());
+  }
   return lyrics;
 }

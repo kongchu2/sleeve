@@ -263,7 +263,7 @@ a.note:hover .note-text { color: #fff; text-decoration: underline; }
 
 .np-right { flex: 1 1 420px; min-width: 0; font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.3vw, 48px); letter-spacing: -0.025em; }
 /* Side padding (cancelled by the negative margin) leaves room for the active line's glow inside the clip box. */
-.lyrics { height: min(72vh, 12.5em); padding: 3.4em 64px 0; margin: 0 -64px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 62%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 62%, transparent 100%); }
+.lyrics { height: min(72vh, 12.5em); padding: 0 64px; margin: 0 -64px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26%, #000 74%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 26%, #000 74%, transparent 100%); }
 .lyrics-inner { position: relative; display: flex; flex-direction: column; align-items: flex-start; transition: transform 0.7s var(--ease); }
 .line { display: block; max-width: 100%; padding: 0.36em 0; border: 0; background: none; text-align: left; line-height: 1.18; letter-spacing: inherit; color: #fff; opacity: 0.34; transform: scale(0.86); transform-origin: 0 50%; transition: opacity 0.6s, transform 0.7s var(--ease), filter 0.6s; }
 .line.is-past { opacity: 0.2; }

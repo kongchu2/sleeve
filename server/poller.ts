@@ -74,6 +74,8 @@ export function startPoller(): void {
   let retrySync = false;
   let lastSync = 0;
   let lastTrack: string | null | undefined;
+  /** Episodes never appear in recently-played, so the end of one is no reason to pull the history. */
+  let lastWasEpisode = false;
   let watched = false;
   let busy = false;
 
@@ -104,12 +106,13 @@ export function startPoller(): void {
             : answer;
         kvSet('now', { at, value } satisfies Snapshot);
         const id = value?.track.id ?? null;
-        if (lastTrack !== undefined && id !== lastTrack) {
+        if (lastTrack !== undefined && id !== lastTrack && !lastWasEpisode) {
           // The previous track has just ended; Spotify can take a moment to list it, hence one retry.
           nextSync = Math.min(nextSync, at + 5_000);
           retrySync = true;
         }
         lastTrack = id;
+        lastWasEpisode = value?.track.kind === 'episode';
         const pace = nowView ? NOW_VIEW_MS : OTHER_VIEW_MS;
         let wait = value?.isPlaying ? pace.playing : pace.idle;
         if (value?.isPlaying) wait = Math.min(wait, Math.max(1_000, value.track.durationMs - value.progressMs + 1_000));

@@ -92,12 +92,17 @@ export const getPlays = (from: number, to: number) => get<Play[]>(`/api/plays?fr
 
 /** `nowView`: the caller is the Now Playing view, which the server keeps more up to date. */
 export async function getNow(nowView: boolean): Promise<Now | null> {
+  const url = '/api/now' + (nowView ? '?view=now' : '');
   const sent = Date.now();
-  const now = await get<Omit<Now, 'receivedAt'> | null>('/api/now' + (nowView ? '?view=now' : ''));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} → ${res.status}`);
+  const now = (await res.json()) as Omit<Now, 'receivedAt'> | null;
   const receivedAt = Date.now();
   if (!now) return null;
-  // The server advanced the position to when it answered, about half the round trip ago.
-  const lag = now.isPlaying ? Math.min((receivedAt - sent) / 2, 1_000) : 0;
+  // The server advanced the position to when it answered. What is left is the way back: about half of
+  // the round trip, not counting the time the server itself spent (it can wait for the poller).
+  const serverMs = Number(res.headers.get('server-timing')?.match(/dur=([\d.]+)/)?.[1]) || 0;
+  const lag = now.isPlaying ? Math.min(Math.max(0, receivedAt - sent - serverMs) / 2, 1_000) : 0;
   return { ...now, progressMs: Math.min(now.progressMs + lag, now.track.durationMs), receivedAt };
 }
 

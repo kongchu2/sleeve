@@ -216,7 +216,7 @@ export function NowPlaying({ now }: { now: Now | null }) {
           </main>
         ) : (
           <main className="np-main">
-              <section className="np-left" aria-label="Current track">
+              <section className="np-left" aria-label={track.kind === 'episode' ? 'Current episode' : 'Current track'}>
                 <button
                   className={'cover-btn' + (floating ? ' is-floating' : '') + (now.isPlaying ? '' : ' is-paused')}
                   aria-pressed={floating}
@@ -227,7 +227,7 @@ export function NowPlaying({ now }: { now: Now | null }) {
                   {track.imageL ? (
                     <img className="cover" src={track.imageL} alt={track.kind === 'episode' ? `${track.artists} podcast cover` : `${track.album} album cover`} key={track.imageL} />
                   ) : (
-                    <div className="cover cover-blank" role="img" aria-label="No album cover" />
+                    <div className="cover cover-blank" role="img" aria-label={track.kind === 'episode' ? 'No podcast cover' : 'No album cover'} />
                   )}
                 </button>
                 <div className="np-titles">
@@ -257,18 +257,24 @@ function LyricsView({ lyrics, now }: { lyrics: Lyrics | 'loading' | null; now: N
 }
 
 /** Lines kept painted around the active one: what the lyrics box can show, plus one that is scrolling out or in. */
-const LINES_ABOVE = 3;
-const LINES_BELOW = 9;
+const LINES_ABOVE = 4;
+const LINES_BELOW = 4;
 
 function SyncedLyrics({ lines, now }: { lines: { t: number; text: string }[]; now: Now }) {
   const active = useActiveLine(lines, now);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const boxRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
 
   // Lines wrap, so the scroll offset is measured rather than computed from a fixed row height.
+  // The active line's middle is held at the box's middle, so as much shows above it as below.
   useLayoutEffect(() => {
-    const measure = () => setOffset(refs.current[Math.max(0, active)]?.offsetTop ?? 0);
+    const measure = () => {
+      const el = refs.current[Math.max(0, active)];
+      const box = boxRef.current;
+      setOffset(el && box ? el.offsetTop + el.offsetHeight / 2 - box.clientHeight / 2 : 0);
+    };
     measure();
     // Re-measure whenever the lyric block reflows (window resize, fullscreen, font load).
     const observer = new ResizeObserver(measure);
@@ -277,11 +283,11 @@ function SyncedLyrics({ lines, now }: { lines: { t: number; text: string }[]; no
   }, [active, lines]);
 
   return (
-    <div className="lyrics">
+    <div className="lyrics" ref={boxRef}>
       <div className="lyrics-inner" ref={innerRef} style={{ transform: `translateY(${-offset}px)` }}>
         {lines.map((l, i) => {
           const away = i - Math.max(0, active);
-          // The box shows about two lines above the active one and seven below; the rest keep their place
+          // The box shows a couple of lines either side of the active one; the rest keep their place
           // in the layout but are not painted (each would be a blurred layer of its own).
           const style: CSSProperties =
             away < -LINES_ABOVE || away > LINES_BELOW ? { visibility: 'hidden' }
