@@ -9,6 +9,8 @@ export const db = new DatabaseSync(path);
 
 db.exec(`
   PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL; -- safe with WAL, and the poller writes every few seconds
+  PRAGMA busy_timeout = 5000; -- the web server and the worker both write
   CREATE TABLE IF NOT EXISTS plays (
     played_at   INTEGER PRIMARY KEY,
     track_id    TEXT NOT NULL,
@@ -39,6 +41,23 @@ for (const column of ['track_number', 'disc_number', 'album_total_tracks']) {
 }
 
 db.exec('CREATE INDEX IF NOT EXISTS plays_track ON plays (track_id, played_at)');
+// Streaks ask for every day one album was played.
+db.exec('CREATE INDEX IF NOT EXISTS plays_album ON plays (album_id, played_at)');
+// Plays still waiting for artwork (see server/importer.ts): few, and none once the lookups are done.
+db.exec('CREATE INDEX IF NOT EXISTS plays_coverless ON plays (track_id, album_id) WHERE image_m IS NULL');
+
+// Which UTC months have plays the archive has not been given yet (see server/archive.ts). Kept by
+// triggers because plays are written from two processes and several places.
+const MONTH_OF = (row: string) => `strftime('%Y-%m', ${row}.played_at / 1000, 'unixepoch')`;
+db.exec(`
+  CREATE TABLE IF NOT EXISTS archive_dirty (month TEXT PRIMARY KEY);
+  CREATE TRIGGER IF NOT EXISTS plays_archive_insert AFTER INSERT ON plays
+    BEGIN INSERT OR IGNORE INTO archive_dirty VALUES (${MONTH_OF('NEW')}); END;
+  CREATE TRIGGER IF NOT EXISTS plays_archive_update AFTER UPDATE ON plays
+    BEGIN INSERT OR IGNORE INTO archive_dirty VALUES (${MONTH_OF('NEW')}), (${MONTH_OF('OLD')}); END;
+  CREATE TRIGGER IF NOT EXISTS plays_archive_delete AFTER DELETE ON plays
+    BEGIN INSERT OR IGNORE INTO archive_dirty VALUES (${MONTH_OF('OLD')}); END;
+`);
 
 export function kvGet<T>(key: string): T | null {
   const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined;

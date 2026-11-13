@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getNow, getStatus, type Now, type Status } from './api.ts';
 import { Calendar } from './Calendar.tsx';
-import { FullAlbums } from './FullAlbums.tsx';
 import { ImportHistory } from './ImportHistory.tsx';
 import { NowPlaying } from './NowPlaying.tsx';
 import { RecapView } from './Recap.tsx';
 import { YearView } from './YearView.tsx';
 
-type Route = { view: 'calendar' | 'now' | 'year' | 'albums' | 'import' | 'recap'; date?: { y: number; m: number; d: number } };
+type Route = { view: 'calendar' | 'now' | 'year' | 'import' | 'recap'; date?: { y: number; m: number; d: number } };
 
-/** `#/now`, `#/year`, `#/albums`, `#/import`, or `#/day/2026-11-10` to open the calendar on a day. */
+/** `#/now`, `#/year`, `#/import`, or `#/day/2026-11-10` to open the calendar on a day. */
 function routeFromHash(): Route {
   const hash = location.hash;
   if (hash === '#/now') return { view: 'now' };
   if (hash === '#/year') return { view: 'year' };
-  if (hash === '#/albums') return { view: 'albums' };
   if (hash === '#/import') return { view: 'import' };
   const month = hash.match(/^#\/recap\/(\d{4})-(\d{2})$/);
   if (month) return { view: 'recap', date: { y: Number(month[1]), m: Number(month[2]) - 1, d: 1 } };
@@ -39,11 +37,11 @@ export function App() {
 
   const refreshNow = useCallback(async () => {
     try {
-      setNow(await getNow());
+      setNow(await getNow(view === 'now'));
     } catch {
       /* keep the last known state on a transient failure */
     }
-  }, []);
+  }, [view]);
 
   const authed = status?.authed ?? false;
   useEffect(() => {
@@ -69,9 +67,8 @@ export function App() {
       </Gate>
     );
 
-  if (view === 'now') return <NowPlaying now={now} refresh={refreshNow} />;
+  if (view === 'now') return <NowPlaying now={now} />;
   if (view === 'year') return <YearView />;
-  if (view === 'albums') return <FullAlbums />;
   if (view === 'import') return <ImportHistory />;
   if (view === 'recap' && route.date) return <RecapView year={route.date.y} month={route.date.m} key={`${route.date.y}-${route.date.m}`} />;
   // Keyed by the requested day so following a link from another view re-opens the calendar there.
@@ -81,7 +78,7 @@ export function App() {
 function Gate({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {
   return (
     <div className="gate">
-      <div className="mono-label">LISTENING LOG</div>
+      <div className="mono-label">SLEEVE</div>
       <h1>{title}</h1>
       <p>{body}</p>
       {children}

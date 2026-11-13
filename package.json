@@ -1,10 +1,11 @@
 {
-  "name": "spotify-calendar",
+  "name": "sleeve",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n server,web \"APP_URL=http://127.0.0.1:5180 node --env-file-if-exists=.env --watch server/index.ts\" \"vite\"",
     "build": "tsc --noEmit && vite build",
+    "test": "node --test \"test/*.test.ts\"",
     "start": "node --env-file-if-exists=.env server/index.ts",
     "worker": "node --env-file-if-exists=.env server/worker.ts"
   },

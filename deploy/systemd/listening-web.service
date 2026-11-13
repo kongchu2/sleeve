@@ -1,14 +1,14 @@
 # Example unit: adjust User, the paths and the node binary to your machine.
 [Unit]
-Description=Listening Log web server
+Description=Sleeve web server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=listening
-WorkingDirectory=/opt/spotify-calendar
-EnvironmentFile=/opt/spotify-calendar/.env
+WorkingDirectory=/opt/sleeve
+EnvironmentFile=/opt/sleeve/.env
 Environment=COLLECT=0
 ExecStart=/usr/bin/node server/index.ts
 Restart=always

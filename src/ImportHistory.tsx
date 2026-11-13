@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getImportStatus, postImport, type ImportEntry, type ImportStatus } from './api.ts';
+import { getImportStatus, postImport, type ImportEntry, type ImportResult } from './api.ts';
 import { BackLink } from './shared.tsx';
 
 const CHUNK = 4000;
@@ -37,26 +37,28 @@ function parseExport(text: string): { entries: ImportEntry[]; basic: boolean } {
 }
 
 export function ImportHistory() {
-  const [status, setStatus] = useState<ImportStatus | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [coverless, setCoverless] = useState(0);
+  const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const uploading = progress !== null;
 
-  // Poll while a job runs (it keeps going on the server even if this page is closed).
-  const running = uploading || status?.state === 'running';
+  // Artwork is filled in by the server after the import; keep the count fresh while any is outstanding.
   useEffect(() => {
     let live = true;
-    const load = () => getImportStatus().then((s) => { if (live) setStatus(s); }, () => {});
+    const load = () => getImportStatus().then((s) => { if (live) setCoverless(s.coverlessTracks); }, () => {});
     void load();
-    if (!running) return () => { live = false; };
-    const id = setInterval(load, 1500);
+    if (uploading || !coverless) return () => { live = false; };
+    const id = setInterval(load, 15_000);
     return () => { live = false; clearInterval(id); };
-  }, [running]);
+  }, [uploading, coverless > 0]);
 
   const onFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    setUploading(true);
+    setProgress({ sent: 0, total: 0 });
     setMessage(null);
+    setResult(null);
     try {
       const all: ImportEntry[] = [];
       let sawBasic = false;
@@ -73,17 +75,27 @@ export function ImportHistory() {
         );
         return;
       }
-      for (let i = 0; i < all.length; i += CHUNK) await postImport(all.slice(i, i + CHUNK));
-      setStatus(await getImportStatus());
+      const total: ImportResult = { added: 0, skipped: 0 };
+      for (let i = 0; i < all.length; i += CHUNK) {
+        const r = await postImport(all.slice(i, i + CHUNK));
+        total.added += r.added;
+        total.skipped += r.skipped;
+        setProgress({ sent: Math.min(i + CHUNK, all.length), total: all.length });
+      }
+      setResult(total);
     } catch (err) {
-      setMessage(err instanceof Error ? `Could not read that file: ${err.message}` : 'Could not read that file.');
+      setMessage(
+        err instanceof Error
+          ? `The import stopped: ${err.message}. Choosing the files again resumes it; nothing is added twice.`
+          : 'The import stopped. Choosing the files again resumes it; nothing is added twice.',
+      );
     } finally {
-      setUploading(false);
+      setProgress(null);
       if (input.current) input.current.value = '';
     }
   };
 
-  const lookup = status && status.tracksTotal ? status.tracksDone / status.tracksTotal : 0;
+  const sent = progress?.total ? progress.sent / progress.total : 0;
 
   return (
     <div className="page">
@@ -99,38 +111,37 @@ export function ImportHistory() {
             <strong>Extended streaming history</strong>. Spotify emails a download link, usually within a few days (it can take up to 30).
           </li>
           <li>Unzip it and choose the <code>Streaming_History_Audio_*.json</code> files below.</li>
-          <li>Each track is looked up on Spotify for its artwork, so years of history can take a while. You can leave this page; it keeps going.</li>
+          <li>Your plays appear right away. Artwork follows over the next hours; you can leave this page.</li>
         </ol>
 
         <div className="import-actions">
-          <input ref={input} id="import-files" className="import-input" type="file" accept=".json,application/json" multiple disabled={running} onChange={(e) => void onFiles(e.target.files)} />
-          <label className={'import-button' + (running ? ' is-disabled' : '')} htmlFor="import-files">
-            {uploading ? 'Reading files…' : status?.state === 'running' ? 'Import in progress…' : 'Choose files'}
+          <input ref={input} id="import-files" className="import-input" type="file" accept=".json,application/json" multiple disabled={uploading} onChange={(e) => void onFiles(e.target.files)} />
+          <label className={'import-button' + (uploading ? ' is-disabled' : '')} htmlFor="import-files">
+            {uploading ? 'Importing…' : 'Choose files'}
           </label>
         </div>
 
         {message && <p className="import-message" role="alert">{message}</p>}
 
-        {status && status.state !== 'idle' && (
+        {(progress?.total || result || coverless > 0) && (
           <section className="import-status" aria-live="polite">
-            {status.state === 'running' && (
+            {progress && progress.total > 0 && (
               <>
-                <div className="bar" role="progressbar" aria-label="Track lookup" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(lookup * 100)}>
-                  <div className="bar-fill import-fill" style={{ width: lookup * 100 + '%' }} />
+                <div className="bar" role="progressbar" aria-label="Import" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sent * 100)}>
+                  <div className="bar-fill import-fill" style={{ width: sent * 100 + '%' }} />
                 </div>
                 <p>
-                  Looking up tracks: {status.tracksDone.toLocaleString('en')} of {status.tracksTotal.toLocaleString('en')} ·{' '}
-                  {status.received.toLocaleString('en')} plays queued
+                  Importing: {progress.sent.toLocaleString('en')} of {progress.total.toLocaleString('en')} streams
                 </p>
               </>
             )}
-            {status.state === 'done' && (
+            {result && (
               <p>
-                Done. Added <strong>{status.added.toLocaleString('en')}</strong> plays
-                {status.skipped > 0 && `, skipped ${status.skipped.toLocaleString('en')} already in your log`}. <a href="#/year">See your year</a>
+                Done. Added <strong>{result.added.toLocaleString('en')}</strong> plays
+                {result.skipped > 0 && `, skipped ${result.skipped.toLocaleString('en')} already in your log`}. <a href="#/year">See your year</a>
               </p>
             )}
-            {status.state === 'error' && <p role="alert">The import stopped: {status.error}. Choosing the files again resumes it; nothing is added twice.</p>}
+            {!uploading && coverless > 0 && <p>Artwork for {coverless.toLocaleString('en')} tracks is still being looked up.</p>}
           </section>
         )}
       </div>

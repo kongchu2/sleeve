@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { getRecap, type Recap } from './api.ts';
 import { usePalette } from './color.ts';
+import { langOf } from './lang.ts';
 import { MONTHS } from './shared.tsx';
 
 const two = (n: number) => String(n).padStart(2, '0');
@@ -50,8 +51,8 @@ export function RecapView({ year, month }: { year: number; month: number }) {
               {top.image_m ? <img className="recap-cover" src={top.image_m} alt={`${top.name} album cover`} /> : <div className="recap-cover" />}
               <div className="recap-top-text">
                 <div className="mono-label">MOST PLAYED ALBUM</div>
-                <div className="recap-album">{top.name}</div>
-                <div className="recap-artist">{top.artists} · {top.plays} plays</div>
+                <div className="recap-album" lang={langOf(top.name, top.artists)}>{top.name}</div>
+                <div className="recap-artist" lang={langOf(top.name, top.artists)}>{top.artists} · {top.plays} plays</div>
               </div>
             </section>
 
@@ -61,8 +62,7 @@ export function RecapView({ year, month }: { year: number; month: number }) {
                 <div><dt>Listening time</dt><dd>{duration(recap.minutes)}</dd></div>
                 <div><dt>Days with music</dt><dd>{recap.days}</dd></div>
                 <div><dt>Albums</dt><dd>{recap.albums}</dd></div>
-                <div><dt>Full albums</dt><dd>{recap.fullAlbums}</dd></div>
-                <div><dt>Top artist</dt><dd className="recap-small">{recap.topArtists[0]?.name ?? '—'}</dd></div>
+                <div><dt>Top artist</dt><dd className="recap-small" lang={langOf(recap.topArtists[0]?.name)}>{recap.topArtists[0]?.name ?? '—'}</dd></div>
               </dl>
 
               {recap.peakHour !== null && (
@@ -88,8 +88,8 @@ export function RecapView({ year, month }: { year: number; month: number }) {
                       <span className="recap-rank">{i + 2}</span>
                       {a.image_s ? <img className="track-art" src={a.image_s} alt="" loading="lazy" /> : <span className="track-art" />}
                       <span className="track-text">
-                        <span className="track-name">{a.name}</span>
-                        <span className="track-sub">{a.artists}</span>
+                        <span className="track-name" lang={langOf(a.name, a.artists)}>{a.name}</span>
+                        <span className="track-sub" lang={langOf(a.name, a.artists)}>{a.artists}</span>
                       </span>
                       <span className="track-side"><span>{a.plays}</span></span>
                     </div>

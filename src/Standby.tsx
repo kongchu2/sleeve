@@ -45,10 +45,14 @@ export function Standby() {
   const [covers, setCovers] = useState<string[]>([]);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    // The clock shows minutes, so it wakes once a minute, just after the minute turns: a tick re-renders the whole wall.
+    let timer: ReturnType<typeof setTimeout>;
+    const untilNextMinute = () => 60_000 - (Date.now() % 60_000) + 50;
+    const tick = () => { setNow(new Date()); timer = setTimeout(tick, untilNextMinute()); };
+    timer = setTimeout(tick, untilNextMinute());
     const onResize = () => setSize(screenSize());
     addEventListener('resize', onResize);
-    return () => { clearInterval(id); removeEventListener('resize', onResize); };
+    return () => { clearTimeout(timer); removeEventListener('resize', onResize); };
   }, []);
 
   // Ask for exactly as many covers as the screen holds; refreshed when that or the date changes.

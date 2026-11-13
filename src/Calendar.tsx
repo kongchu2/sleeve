@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { getDayNotes, getPlays, type DayNotes, type Now, type Play } from './api.ts';
 import { usePalette, usePoints } from './color.ts';
+import { langOf } from './lang.ts';
 import { MONTHS } from './shared.tsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -46,66 +47,22 @@ function tracksOf(plays: Play[]): DayTrack[] {
   return [...map.values()].sort((a, b) => a.first - b.first);
 }
 
-type AlbumGroup = DayAlbum & { artists: string; minutes: number; tracks: DayTrack[] };
+type AlbumGroup = DayAlbum & { artists: string; minutes: number; tracks: DayTrack[]; last: number };
 
-/** A day's plays folded into one entry per album, most played first, each with its tracks in listening order. */
+/** A day's plays folded into one entry per album, most recently played first, each with its tracks newest first. */
 function groupsOf(plays: Play[]): AlbumGroup[] {
-  return albumsOf(plays).map((album) => {
-    const own = plays.filter((p) => p.album_id === album.id);
-    return {
-      ...album,
-      artists: own[0].artists,
-      minutes: Math.round(own.reduce((a, p) => a + p.duration_ms, 0) / 60_000),
-      tracks: tracksOf(own),
-    };
-  });
-}
-
-const MIN_FULL_ALBUM_TRACKS = 4;
-
-/**
- * Albums heard in full: every track of the album played in one unbroken run (any order, repeats allowed),
- * with no other album in between. Singles and short EPs are ignored. A run that crosses midnight
- * belongs to the day it started. Returns album ids per day of the month.
- */
-function fullAlbumsByDay(plays: Play[]): Map<number, Set<string>> {
-  const out = new Map<number, Set<string>>();
-  let start = 0;
-  for (let i = 1; i <= plays.length; i++) {
-    if (i < plays.length && plays[i].album_id === plays[start].album_id) continue;
-    const first = plays[start];
-    const total = first.album_total_tracks ?? 0;
-    if (total >= MIN_FULL_ALBUM_TRACKS) {
-      const heard = new Set(plays.slice(start, i).map((p) => p.track_id));
-      if (heard.size >= total) {
-        const day = new Date(first.played_at).getDate();
-        if (!out.has(day)) out.set(day, new Set());
-        out.get(day)!.add(first.album_id);
-      }
-    }
-    start = i;
-  }
-  return out;
-}
-
-function DiscIcon({ size }: { size: number }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-/** "FULL ALBUM" marker tinted with the album's own point colour. */
-function FullAlbumTag({ imageS }: { imageS: string | null }) {
-  const point = usePalette(imageS).point;
-  return (
-    <span className="full-tag" style={{ color: point }}>
-      <DiscIcon size={12} />
-      FULL ALBUM
-    </span>
-  );
+  return albumsOf(plays)
+    .map((album) => {
+      const own = plays.filter((p) => p.album_id === album.id);
+      return {
+        ...album,
+        artists: own[0].artists,
+        minutes: Math.round(own.reduce((a, p) => a + p.duration_ms, 0) / 60_000),
+        tracks: tracksOf(own).reverse(),
+        last: Math.max(...own.map((p) => p.played_at)),
+      };
+    })
+    .sort((a, b) => b.last - a.last);
 }
 
 const two = (n: number) => String(n).padStart(2, '0');
@@ -127,18 +84,47 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   const firstWeekday = new Date(ym.y, ym.m, 1).getDay();
   const lastPastDay = isCurrentMonth ? today.getDate() : daysInMonth;
 
-  useEffect(() => {
-    let live = true;
-    const load = () =>
-      getPlays(new Date(ym.y, ym.m, 1).getTime(), new Date(ym.y, ym.m + 1, 1).getTime()).then(
-        (rows) => { if (live) setPlays(rows); },
+  // The month is fetched whole once; after that only plays newer than the newest one already here are
+  // asked for and appended, so a refresh that finds nothing costs nothing and re-renders nothing.
+  const monthStart = new Date(ym.y, ym.m, 1).getTime();
+  const monthEnd = new Date(ym.y, ym.m + 1, 1).getTime();
+  const loaded = useRef({ month: monthStart, newest: monthStart - 1 });
+  const load = useCallback(
+    () =>
+      getPlays(loaded.current.newest + 1, monthEnd).then(
+        (rows) => {
+          const state = loaded.current;
+          if (state.month !== monthStart) return; // an answer for a month since left
+          const fresh = rows.filter((r) => r.played_at > state.newest); // two requests can overlap
+          if (!fresh.length) return;
+          state.newest = fresh[fresh.length - 1].played_at;
+          setPlays((prev) => [...prev, ...fresh]);
+        },
         () => {},
-      );
+      ),
+    [monthStart, monthEnd],
+  );
+
+  useEffect(() => {
+    loaded.current = { month: monthStart, newest: monthStart - 1 };
     setPlays([]);
     void load();
-    const id = isCurrentMonth ? setInterval(load, 60_000) : undefined;
-    return () => { live = false; clearInterval(id); };
-  }, [ym.y, ym.m, isCurrentMonth]);
+    if (!isCurrentMonth) return;
+    // A hidden tab does not ask; it catches up when it is shown again.
+    const refresh = () => { if (!document.hidden) void load(); };
+    const id = setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', refresh); };
+  }, [load, monthStart, isCurrentMonth]);
+
+  // A track change means the previous track just ended and the server is pulling it into the history:
+  // ask shortly after (twice, as Spotify can be slow to list it) rather than waiting for the minute tick.
+  const nowId = now?.track.id ?? null;
+  useEffect(() => {
+    if (!isCurrentMonth) return;
+    const timers = [setTimeout(load, 8_000), setTimeout(load, 35_000)];
+    return () => timers.forEach(clearTimeout);
+  }, [nowId, load, isCurrentMonth]);
 
   const byDay = useMemo(() => {
     const map = new Map<number, Play[]>();
@@ -150,8 +136,6 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
     }
     return map;
   }, [plays]);
-
-  const fullByDay = useMemo(() => fullAlbumsByDay(plays), [plays]);
 
   // Default selection: today in the current month, otherwise the last day with music.
   const sel = picked ?? (isCurrentMonth ? today.getDate() : Math.max(1, ...byDay.keys()));
@@ -175,10 +159,11 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   const points = usePoints(useMemo(() => [...new Set(hourImages.filter((u): u is string => !!u))], [hourImages]));
 
   // The month's colour flow: one swatch per day, tinted by that day's most played album.
-  const dayCovers = useMemo(
-    () => Array.from({ length: daysInMonth }, (_, i) => albumsOf(byDay.get(i + 1) ?? [])[0]?.imageS ?? null),
+  const dayAlbums = useMemo(
+    () => Array.from({ length: daysInMonth }, (_, i) => albumsOf(byDay.get(i + 1) ?? [])),
     [byDay, daysInMonth],
   );
+  const dayCovers = useMemo(() => dayAlbums.map((albums) => albums[0]?.imageS ?? null), [dayAlbums]);
   const dayColors = usePoints(useMemo(() => [...new Set(dayCovers.filter((u): u is string => !!u))], [dayCovers]));
 
   // Streak and "on this day" for the selected date.
@@ -201,9 +186,12 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
     setPicked(null);
   };
 
+  // The resting backdrop: what is playing now, or else the selected day's most played album.
+  const ambient = now?.track.imageM ?? now?.track.imageS ?? selAlbums[0]?.image;
+
   return (
     <div className="page" style={{ '--accent': accent } as CSSProperties}>
-      {selAlbums[0]?.image && <img className="ambient" src={selAlbums[0].image} alt="" key={selAlbums[0].image} />}
+      {ambient && <img className="ambient" src={ambient} alt="" key={ambient} />}
       <div className={'hover-bg' + (bg.on ? ' is-on' : '')} aria-hidden="true">
         {bg.prev && <img src={bg.prev} alt="" key={'p' + bg.prev} />}
         {bg.cur && <img className="hover-bg-cur" src={bg.cur} alt="" key={bg.cur} />}
@@ -211,7 +199,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
       <div className="wrap">
         <header className="cal-header">
           <div className="cal-title">
-            <div className="mono-label">LISTENING LOG · {ym.y}</div>
+            <div className="mono-label">SLEEVE · {ym.y}</div>
             <div className="cal-title-row">
               <h1>{MONTHS[ym.m]}</h1>
               <div className="nav-group">
@@ -228,12 +216,10 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
             </div>
             <nav className="cal-links" aria-label="More views">
               <a href="#/year">Year</a>
-              <a href="#/albums">Full albums</a>
               <a href={`#/recap/${ym.y}-${two(ym.m + 1)}`}>Recap</a>
               <a href="#/import">Import history</a>
             </nav>
           </div>
-          {now && <NowPill now={now} />}
         </header>
 
         <main className="cal-main">
@@ -251,8 +237,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
               {Array.from({ length: daysInMonth }, (_, i) => {
                 const d = i + 1;
                 if (d > lastPastDay) return <div key={d} className="day-future">{d}</div>;
-                const albums = albumsOf(byDay.get(d) ?? []).slice(0, 4);
-                const full = fullByDay.get(d);
+                const albums = dayAlbums[i].slice(0, 4);
                 const selected = d === sel;
                 if (!albums.length)
                   return (
@@ -265,14 +250,13 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                     key={d}
                     className={'day day-filled' + (selected ? ' is-selected' : '')}
                     style={{ animationDelay: d * 18 + 'ms' }}
-                    aria-label={`${MONTHS[ym.m]} ${d}, ${plural(albums.length, 'album')}${full?.size ? `, ${plural(full.size, 'full album')}` : ''}`}
+                    aria-label={`${MONTHS[ym.m]} ${d}, ${plural(albums.length, 'album')}`}
                     aria-pressed={selected}
                     onClick={() => setPicked(d)}
                   >
                     {albums.map((a, k) => (
                       <span key={a.id} className="tile" onPointerEnter={() => showBg(a.image)} onPointerLeave={hideBg} style={{ gridColumn: MOSAIC[albums.length][k][0], gridRow: MOSAIC[albums.length][k][1] }}>
                         {a.image && <img src={a.image} alt="" loading="lazy" />}
-                        {full?.has(a.id) && <span className="full-badge" title="Full album"><DiscIcon size={12} /></span>}
                       </span>
                     ))}
                     <span className="day-num">{d}</span>
@@ -295,18 +279,29 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
               </div>
             </div>
 
+            {selTracks.length > 0 && (
+              <div className="hours">
+                <div className="hours-bars" aria-hidden="true">
+                  {hourImages.map((u, h) => <span key={h} style={u ? { background: points[u] ?? '#3A3A44' } : undefined} />)}
+                </div>
+                <div className="hours-labels" aria-hidden="true">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+                </div>
+              </div>
+            )}
+
             {notes && (notes.streak || notes.onThisDay.length > 0) && (
               <div className="notes">
                 {notes.streak && (
                   <div className="note">
                     <span className="note-label">{notes.streak.days} days in a row</span>
-                    <span className="note-text">{notes.streak.album}</span>
+                    <span className="note-text" lang={langOf(notes.streak.album)}>{notes.streak.album}</span>
                   </div>
                 )}
                 {notes.onThisDay.slice(0, 2).map((o) => (
                   <a className="note" key={o.year} href={`#/day/${o.day}`}>
                     <span className="note-label">{ym.y - o.year === 1 ? 'A year ago today' : `${ym.y - o.year} years ago today`}</span>
-                    <span className="note-text">
+                    <span className="note-text" lang={langOf(o.album)}>
                       {o.image_s && <img src={o.image_s} alt="" loading="lazy" />}
                       {o.album}
                     </span>
@@ -315,36 +310,24 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
               </div>
             )}
 
-            {selIsToday && now && (
-              <a className="now-cta" href="#/now">
-                <span>See what's playing now</span>
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </a>
-            )}
+            {now && <NowCard now={now} />}
 
             {selTracks.length > 0 ? (
               <>
-                <div className="hours">
-                  <div className="hours-bars" aria-hidden="true">
-                    {hourImages.map((u, h) => <span key={h} style={u ? { background: points[u] ?? '#3A3A44' } : undefined} />)}
-                  </div>
-                  <div className="hours-labels" aria-hidden="true">
-                    <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
-                  </div>
-                </div>
                 <div className="albums">
                   {selGroups.map((g) => {
                     const open = openKey === dayKey + g.id;
+                    const lang = langOf(g.name, g.artists, ...g.tracks.map((t) => t.name));
                     return (
                       <div className={'album' + (open ? ' is-open' : '')} key={g.id} onPointerEnter={() => showBg(g.image)} onPointerLeave={hideBg}>
                         <button className="album-row" aria-expanded={open} onClick={() => setOpenKey(open ? null : dayKey + g.id)}>
                           {g.imageS ? <img className="track-art" src={g.imageS} alt="" loading="lazy" /> : <span className="track-art" />}
                           <span className="track-text">
-                            <span className="track-name">{g.name}</span>
-                            <span className="track-sub">{g.artists}</span>
+                            <span className="track-name" lang={lang}>{g.name}</span>
+                            <span className="track-sub" lang={lang}>{g.artists}</span>
                           </span>
                           <span className="track-side">
-                            {fullByDay.get(sel)?.has(g.id) ? <FullAlbumTag imageS={g.imageS} /> : <span>{plural(g.tracks.length, 'track')}</span>}
+                            <span>{plural(g.tracks.length, 'track')}</span>
                             <span className="dim">{g.minutes} min</span>
                           </span>
                           <svg className="album-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
@@ -356,7 +339,7 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
                               return (
                                 <div className="album-track" key={t.id}>
                                   <span className="album-track-time">{two(at.getHours())}:{two(at.getMinutes())}</span>
-                                  <span className="album-track-name">{t.name}</span>
+                                  <span className="album-track-name" lang={lang}>{t.name}</span>
                                   {t.count > 1 && <span className="album-track-count">×{t.count}</span>}
                                 </div>
                               );
@@ -381,16 +364,33 @@ export function Calendar({ now, initial }: { now: Now | null; initial?: { y: num
   );
 }
 
-function NowPill({ now }: { now: Now }) {
-  const point = usePalette(now.track.imageS).point;
+/** What is playing right now: a row pinned above the album list (it does not scroll with it), a size larger and in the cover's colour; opens the Now Playing screen. */
+function NowCard({ now }: { now: Now }) {
+  const { track } = now;
+  const point = usePalette(track.imageS).point;
+  // Re-render every second while playing so the progress line keeps moving between polls.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!now.isPlaying) return;
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [now.isPlaying]);
+  const elapsed = Math.min(track.durationMs, now.isPlaying ? now.progressMs + (Date.now() - now.receivedAt) : now.progressMs);
+  const art = track.imageM ?? track.imageS;
+  const lang = langOf(track.name, track.artists, track.album);
   return (
-    <a className="pill" href="#/now" style={{ '--point': point } as CSSProperties}>
-      {now.track.imageS ? <img className="pill-art" src={now.track.imageS} alt="" /> : <span className="pill-art" />}
-      <span className="pill-text">
-        <span className="pill-label">{now.isPlaying ? 'NOW PLAYING' : 'PAUSED'}</span>
-        <span className="pill-title">{now.track.name} — {now.track.artists}</span>
+    <a className="now-row" href="#/now" aria-label={`Open Now Playing: ${track.name} by ${track.artists}`} style={{ '--point': point } as CSSProperties}>
+      {art ? <img className="now-row-art" src={art} alt="" /> : <span className="now-row-art" />}
+      <span className="track-text">
+        <span className="now-row-state">
+          <span className={'now-row-eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
+          {now.isPlaying ? 'NOW PLAYING' : 'PAUSED'}
+        </span>
+        <span className="now-row-name" lang={lang}>{track.name}</span>
+        <span className="track-sub" lang={lang}>{track.artists}</span>
       </span>
-      <span className={'eq' + (now.isPlaying ? '' : ' is-paused')} aria-hidden="true"><span /><span /><span /></span>
+      <svg className="now-row-go" aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+      <span className="now-row-bar" aria-hidden="true" style={{ width: (elapsed / track.durationMs) * 100 + '%' }} />
     </a>
   );
 }

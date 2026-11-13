@@ -1,0 +1,22 @@
+[package]
+name = "lyrics-sidecar"
+version = "0.1.0"
+edition = "2021"
+description = "Fetches Spotify's own synced lyrics for the Sleeve app, via librespot."
+license = "MIT"
+
+[[bin]]
+name = "lyrics-sidecar"
+path = "src/main.rs"
+
+[dependencies]
+librespot-core = { version = "0.8", default-features = false, features = ["rustls-tls-native-roots"] }
+librespot-oauth = { version = "0.8", default-features = false, features = ["rustls-tls-native-roots"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+anyhow = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
