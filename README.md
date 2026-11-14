@@ -80,6 +80,7 @@ npm test                  # node:test, 인메모리 데이터베이스 사용
 서버는 `127.0.0.1`에서만 요청을 받습니다. 다른 기기에서 접속하려면 **HTTPS와 접근 제어**를 제공하는 것(Tailscale 같은 사설 네트워크, 또는 인증이 붙은 리버스 프록시) 뒤에 두세요. API에 접근할 수 있는 사람은 누구나 청취 기록을 읽고, 재생 기록을 가져와 넣고, 로그아웃시킬 수 있습니다.
 
 - Spotify는 루프백이 아닌 Redirect URI에 HTTPS를 요구합니다. Spotify 대시보드에 `https://your-host/auth/callback`을 등록하고 `SPOTIFY_REDIRECT_URI`를 설정하거나, 내 컴퓨터에서 한 번 로그인한 뒤 `data/listening.db`를 서버로 복사하세요.
+- 서버는 `localhost`, IP 주소, `APP_URL`·`SPOTIFY_REDIRECT_URI`의 호스트로 온 요청에만 답합니다. 다른 웹사이트가 DNS rebinding으로 접근하는 것을 막기 위해서입니다. 다른 이름(예: Tailscale MagicDNS 이름)으로 접속한다면 그 이름을 `ALLOWED_HOSTS`에 추가하세요.
 - systemd 유닛 예시는 `deploy/systemd/`에 있습니다.
 
 ### 선택 사항: 기록을 git 저장소에 보관하기
@@ -108,6 +109,7 @@ cargo build --release
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:$PORT/auth/callback` | 대시보드에 등록한 Redirect URI와 일치해야 합니다 |
 | `PORT` | `8787` | 서버가 사용하는 포트 |
 | `HOST` | `127.0.0.1` | 서버가 바인딩하는 주소 |
+| `ALLOWED_HOSTS` | — | 서버가 추가로 받아들일 호스트 이름(쉼표로 구분, [서버에서 실행하기](#서버에서-실행하기) 참고) |
 | `DB_PATH` | `data/listening.db` | SQLite 데이터베이스 파일 |
 | `COLLECT` | 켜짐 | `0`으로 설정하면 웹 서버가 수집하지 않습니다(worker가 수집할 때) |
 | `DATA_REPO_DIR` | — | worker가 사용하는 보관용 저장소 클론 |

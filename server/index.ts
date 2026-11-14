@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { compress } from 'hono/compress';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { db } from './db.ts';
+import { requestGuard } from './guard.ts';
 import { coverImported, coverlessTracks, importEntries, settleImported } from './importer.ts';
 import { getLyrics } from './lyrics.ts';
 import { currentNow, noteViewer, startPoller } from './poller.ts';
@@ -16,6 +18,9 @@ const HOST = process.env.HOST ?? '127.0.0.1';
 const APP_URL = process.env.APP_URL ?? '/';
 
 const app = new Hono();
+
+// Loopback alone doesn't stop other sites in your browser from using the API: see server/guard.ts.
+app.use(requestGuard());
 
 // A month of plays is over a megabyte of very repetitive JSON.
 app.use(compress());
@@ -109,7 +114,12 @@ app.get('/api/recap', (c) => {
 
 app.get('/api/import', (c) => c.json({ coverlessTracks: coverlessTracks() }));
 
-app.post('/api/import', async (c) => {
+/** A chunk from the import page (4000 entries) is around a megabyte. */
+const IMPORT_MAX_BYTES = 8 * 1024 * 1024;
+
+app.post('/api/import', bodyLimit({ maxSize: IMPORT_MAX_BYTES, onError: (c) => c.json({ error: 'import chunk too large' }, 413) }), async (c) => {
+  // Only the import page's JSON requests: a form or text/plain post is the kind another site can send.
+  if (!c.req.header('content-type')?.startsWith('application/json')) return c.json({ error: 'expected application/json' }, 415);
   const body = (await c.req.json().catch(() => null)) as { entries?: unknown[] } | null;
   if (!body || !Array.isArray(body.entries)) return c.json({ error: 'entries required' }, 400);
   return c.json(importEntries(body.entries));
