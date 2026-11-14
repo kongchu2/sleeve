@@ -1,9 +1,19 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const path = process.env.DB_PATH ?? 'data/listening.db';
-mkdirSync(dirname(path), { recursive: true });
+if (path !== ':memory:') {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  // The kv table holds the Spotify refresh token, so keep the file to its owner. SQLite gives the -wal and
+  // -shm files the same mode as the database, which is why this happens before it is opened.
+  closeSync(openSync(path, 'a', 0o600));
+  try {
+    chmodSync(path, 0o600);
+  } catch (err) {
+    console.warn(`Could not make ${path} private to its owner:`, err);
+  }
+}
 
 export const db = new DatabaseSync(path);
 

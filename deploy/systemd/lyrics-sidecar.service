@@ -11,6 +11,8 @@ WorkingDirectory=/opt/sleeve
 Environment=LYRICS_CACHE_DIR=/opt/sleeve/data/spotify
 Environment=LYRICS_BIND=127.0.0.1:8899
 ExecStart=/opt/sleeve/lyrics-sidecar/target/release/lyrics-sidecar
+# Files it creates stay readable by this user only: the cache keeps a reusable Spotify login.
+UMask=0077
 Restart=always
 RestartSec=10
 

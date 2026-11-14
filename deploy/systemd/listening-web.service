@@ -11,6 +11,8 @@ WorkingDirectory=/opt/sleeve
 EnvironmentFile=/opt/sleeve/.env
 Environment=COLLECT=0
 ExecStart=/usr/bin/node server/index.ts
+# Files it creates stay readable by this user only: the database holds the Spotify refresh token.
+UMask=0077
 Restart=always
 RestartSec=5
 
