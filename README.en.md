@@ -80,6 +80,7 @@ npm test                  # node:test, against an in-memory database
 The server listens on `127.0.0.1` only. To reach it from other devices, put it behind something that provides **HTTPS and access control** (a private network such as Tailscale, or a reverse proxy with authentication) — anyone who can reach the API can read your listening history, import plays into it, and sign you out.
 
 - Spotify requires HTTPS for non-loopback redirect URIs. Either register `https://your-host/auth/callback` in the Spotify dashboard and set `SPOTIFY_REDIRECT_URI`, or sign in once on your own machine and copy `data/listening.db` to the server.
+- The server only answers requests addressed to `localhost`, an IP address, or the host in `APP_URL` / `SPOTIFY_REDIRECT_URI`, which stops other websites from reaching it through DNS rebinding. If you reach it by another name (a Tailscale MagicDNS name, say), add it to `ALLOWED_HOSTS`.
 - Example systemd units are in `deploy/systemd/`.
 
 ### Optional: archive your history to a git repository
@@ -115,6 +116,7 @@ off unless `SPOTIFY_LYRICS_URL` is set.
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:$PORT/auth/callback` | Must match a Redirect URI registered in the dashboard |
 | `PORT` | `8787` | Port the server listens on |
 | `HOST` | `127.0.0.1` | Address the server binds to |
+| `ALLOWED_HOSTS` | — | Extra host names the server answers to, comma-separated (see [Running on a server](#running-on-a-server)) |
 | `DB_PATH` | `data/listening.db` | SQLite database file |
 | `COLLECT` | on | Set to `0` to stop the web server from collecting (when the worker does it) |
 | `DATA_REPO_DIR` | — | Archive repository clone used by the worker |
